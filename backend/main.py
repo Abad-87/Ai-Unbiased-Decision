@@ -37,6 +37,7 @@ from hiring.router    import router as hiring_router
 from loan.router      import router as loan_router
 from social.router    import router as social_router
 from utils.shap_cache import router as shap_router
+from utils.feedback_router import router as feedback_router
 from utils.logger     import setup_logger, log_correlation_event
 from utils.model_registry import registry
 from utils.database   import ensure_indexes
@@ -407,10 +408,11 @@ async def correlation_middleware(request: Request, call_next):
 
 
 # ─── Routers ─────────────────────────────────────────────────────────────────
-
-app.include_router(hiring_router, prefix="/hiring", tags=["Hiring"])
-app.include_router(loan_router,   prefix="/loan",   tags=["Loan"])
-app.include_router(social_router, prefix="/social", tags=["Social"])
+  
+app.include_router(hiring_router,   prefix="/hiring", tags=["Hiring"])
+app.include_router(loan_router,     prefix="/loan",   tags=["Loan"])
+app.include_router(social_router, prefix="/social",   tags=["Soci"])
+app.include_router(feedback_router,                   tags=["Feedbackal"])
 app.include_router(shap_router,                     tags=["SHAP"])
 
 

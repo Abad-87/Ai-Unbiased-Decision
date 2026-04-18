@@ -154,11 +154,11 @@ async def preprocess_features(
         )
 
     # Build aligned population arrays
-    g_vec, feature_matrix, feat_names = _build_population_arrays(
+    g_vec, feature_matrix, feat_names, feature_stds = _build_population_arrays(
         history, sensitive_attr, sensitive_value, features
     )
 
-    if g_vec is None or len(g_vec) < MIN_HISTORY:
+    if g_vec is None or feature_matrix is None or feature_stds is None or len(g_vec) < MIN_HISTORY:
         return _no_op_report(
             features, sensitive_attr, sensitive_value,
             reason="Insufficient records for this sensitive-attribute dimension — passthrough.",
@@ -168,9 +168,14 @@ async def preprocess_features(
     # Estimate per-feature Pearson correlations with the group indicator
     correlations = _pearson_correlations(g_vec, feature_matrix, feat_names)
 
+    # Per-feature std-dev map (for the correct residualisation formula)
+    std_map: Dict[str, float] = {
+        name: float(feature_stds[i]) for i, name in enumerate(feat_names)
+    }
+
     # Apply residualisation to correlated features
     cleaned_features, correlation_report = _neutralise(
-        features, correlations, g_vec
+        features, correlations, g_vec, std_map,
     )
 
     n_adjusted = sum(1 for r in correlation_report.values() if r["was_adjusted"])
@@ -367,6 +372,50 @@ async def save_prediction(record: dict) -> None:
         _append_to_json(record)
 
 
+async def update_ground_truth(correlation_id: str, ground_truth: int) -> bool:
+    """
+    Attach a real ``ground_truth`` label to an existing prediction record.
+
+    Used by the ``POST /feedback`` endpoint so post-processing fairness
+    metrics (Equalized Odds, Calibration) can be computed against real
+    outcomes rather than the model's own predictions.
+
+    Returns True when a record was updated, False when the record is not
+    found or the database is not reachable.
+    """
+    db = get_database()
+    if db is not None:
+        try:
+            res = await db["predictions"].update_one(
+                {"correlation_id": correlation_id},
+                {"$set": {"ground_truth": int(ground_truth)}},
+            )
+            return res.matched_count > 0
+        except Exception as exc:
+            logger.error(f"MongoDB ground-truth update failed: {exc}")
+            return False
+
+    # JSON fallback
+    if not JSON_LOG_PATH.exists():
+        return False
+    try:
+        with open(JSON_LOG_PATH, "r") as fh:
+            records = json.load(fh)
+        updated = False
+        for r in records:
+            if r.get("correlation_id") == correlation_id:
+                r["ground_truth"] = int(ground_truth)
+                updated = True
+                break
+        if updated:
+            with open(JSON_LOG_PATH, "w") as fh:
+                json.dump(records, fh, indent=2)
+        return updated
+    except Exception as exc:
+        logger.error(f"JSON ground-truth update failed: {exc}")
+        return False
+
+
 async def save_shap_report(correlation_id: str, report: dict) -> None:
     """
     Persist a completed SHAP report to MongoDB (shap_reports collection).
@@ -427,12 +476,15 @@ async def get_recent_predictions(
         projection = {
             "input":                 1,
             "prediction":            1,
+            "prediction_label":      1,
             "confidence":            1,
             "domain":                1,
             "fairness":              1,
+            "bias_risk":             1,
             "sensitive_value_group": 1,
             "timestamp":             1,
             "ground_truth":          1,
+            "correlation_id":        1,
             "_id":                   0,
         }
 
@@ -524,12 +576,18 @@ def _build_population_arrays(
         row_list.append([float(rec_input.get(f, 0.0)) for f in feat_names])
 
     if len(g_list) < MIN_HISTORY:
-        return None, None, feat_names
+        return None, None, feat_names, None
+
+    feature_matrix = np.array(row_list, dtype=np.float64)
+    # Per-feature population std dev — needed for the correct residualisation
+    # formula x_clean = x_raw - r * (sigma_x / sigma_g) * (g_i - g_mean).
+    feature_stds = np.std(feature_matrix, axis=0)
 
     return (
-        np.array(g_list,   dtype=np.float64),
-        np.array(row_list, dtype=np.float64),
+        np.array(g_list, dtype=np.float64),
+        feature_matrix,
         feat_names,
+        feature_stds,
     )
 
 
@@ -563,23 +621,29 @@ def _neutralise(
     features:     Dict[str, Any],
     correlations: Dict[str, float],
     g_vec:        np.ndarray,
+    feature_stds: Dict[str, float],
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Residualise each flagged feature against the sensitive group indicator.
 
-    Single-sample OLS correction:
-        x_clean = x_raw − r × (σ_x / σ_g) × (g_i − ḡ)
+    OLS correction for a single sample::
 
-    g_i = 1.0 (this request IS in the sensitive group by definition —
-                we are computing the correction for its own group membership).
-    Capped at ±MAX_CORRECTION_FRACTION × |x_raw| to prevent over-correction.
+        x_clean = x_raw - r * (sigma_x / sigma_g) * (g_i - g_mean)
+
+    This is the closed-form residual that removes the linear component of
+    ``x`` attributable to group membership, estimated from historical data.
+    ``g_i = 1.0`` because by construction the current request belongs to
+    the sensitive group whose correlations we are neutralising.
+
+    The correction is capped at ±MAX_CORRECTION_FRACTION * |x_raw| to
+    prevent over-correction on noisy / small samples.
     """
     g_mean = float(np.mean(g_vec))
     g_std  = float(np.std(g_vec)) or 1e-9
     g_i    = 1.0   # current request is always in its own group
 
-    cleaned: Dict[str, Any]    = dict(features)
-    report:  Dict[str, Any]    = {}
+    cleaned: Dict[str, Any] = dict(features)
+    report:  Dict[str, Any] = {}
 
     for feat, r in correlations.items():
         raw_val = features.get(feat)
@@ -590,12 +654,14 @@ def _neutralise(
         was_adjusted = abs(r) > CORRELATION_THRESHOLD
 
         if was_adjusted:
-            # Dimensionless correction fraction from group membership signal
-            correction_fraction = r * (g_i - g_mean) / g_std
-            # Scale by raw feature value magnitude; cap at ±5 %
-            max_abs    = MAX_CORRECTION_FRACTION * abs(raw_f) if raw_f != 0 else 1e-6
-            correction = float(np.clip(correction_fraction * abs(raw_f), -max_abs, max_abs))
-            cleaned_val = raw_f + correction
+            x_std      = max(feature_stds.get(feat, 0.0), 1e-9)
+            # Correct OLS formula (units of x)
+            correction = r * (x_std / g_std) * (g_i - g_mean)
+            # Safety cap at ±MAX_CORRECTION_FRACTION * |raw_f|
+            max_abs    = MAX_CORRECTION_FRACTION * abs(raw_f) if raw_f != 0 else x_std * MAX_CORRECTION_FRACTION
+            correction = float(np.clip(correction, -max_abs, max_abs))
+            # Subtract the group-explained component
+            cleaned_val = raw_f - correction
         else:
             cleaned_val = raw_f
 

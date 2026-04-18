@@ -235,6 +235,7 @@ def run_post_processing_checks(
     sensitive_values: List[str],
     sensitive_attr:   str,
     domain:           str,
+    task_type:        str = "binary",
 ) -> Dict:
     """
     Run calibration and equalized-odds checks on a batch of predictions.
@@ -287,15 +288,46 @@ def run_post_processing_checks(
     n_records  = len(y_pred_arr)
     warnings:  List[str] = []
 
+    is_multiclass = task_type == "multiclass" or len(np.unique(y_true_arr)) > 2
+
     # ── 1. Calibration check ──────────────────────────────────────────────────
-    calibration_result = _calibration_check(
-        y_prob_arr, y_true_arr, sens_arr, groups, domain, warnings
-    )
+    if is_multiclass:
+        # For multiclass, y_prob is "top-1 confidence" — not a well-defined
+        # binary positive-class probability — so ECE as computed here would
+        # be meaningless.  Skip with a clear note instead of returning a
+        # misleading zero-disparity.
+        calibration_result = {
+            "per_group":          {},
+            "max_gap":            0.0,
+            "disparity_detected": False,
+            "penalty":            0.0,
+            "note": (
+                "Multiclass calibration check skipped. ECE is defined for "
+                "binary classification; extend with one-vs-rest ECE if needed."
+            ),
+        }
+    else:
+        calibration_result = _calibration_check(
+            y_prob_arr, y_true_arr, sens_arr, groups, domain, warnings
+        )
 
     # ── 2. Equalized Odds check ───────────────────────────────────────────────
-    eq_odds_result = _equalized_odds_check(
-        y_pred_arr, y_true_arr, sens_arr, groups, domain, warnings
-    )
+    # For multiclass, binarize as "correct vs. incorrect" so FPR/FNR remain
+    # well-defined. For binary, use predictions/labels directly.
+    if is_multiclass:
+        y_pred_bin = (y_pred_arr == y_true_arr).astype(np.int32)
+        y_true_bin = np.ones_like(y_true_arr, dtype=np.int32)
+        eq_odds_result = _equalized_odds_check(
+            y_pred_bin, y_true_bin, sens_arr, groups, domain, warnings
+        )
+        eq_odds_result["note"] = (
+            "Multiclass task: equalized-odds computed on correct/incorrect "
+            "binarization (accuracy parity across groups)."
+        )
+    else:
+        eq_odds_result = _equalized_odds_check(
+            y_pred_arr, y_true_arr, sens_arr, groups, domain, warnings
+        )
 
     flag_for_review = (
         calibration_result["disparity_detected"]

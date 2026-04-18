@@ -34,11 +34,20 @@ async def _run_post_processing_background(domain: str, sensitive_attr: str) -> N
             return
         y_pred, y_prob, y_true, sens_vals = [], [], [], []
         for r in records:
+            gt = r.get("ground_truth")
+            if gt is None:
+                # Never use prediction as a fallback ground truth — that
+                # makes equalized-odds always evaluate to zero disparity.
+                continue
             y_pred.append(int(r.get("prediction", 0)))
             y_prob.append(float(r.get("confidence", 0.5)))
-            y_true.append(int(r.get("ground_truth", r.get("prediction", 0))))
+            y_true.append(int(gt))
             sens_vals.append(str(r.get("sensitive_value_group", "unknown")))
         if len(y_pred) < 30:
+            logger.info(
+                f"[{domain}] post-processing skipped: only {len(y_pred)} labelled "
+                f"records (need >= 30). Feed ground-truth via POST /feedback."
+            )
             return
         result = run_post_processing_checks(
             y_pred=y_pred, y_prob=y_prob, y_true=y_true,

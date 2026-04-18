@@ -591,3 +591,45 @@ class SecurityErrorResponse(BaseModel):
     error:          str = "Request rejected"
     reason:         str
     correlation_id: Optional[str] = None
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# FEEDBACK (ground-truth) SCHEMA
+# ═════════════════════════════════════════════════════════════════════════════
+
+class FeedbackRequest(BaseModel):
+    """
+    Input schema for ``POST /feedback``.
+
+    Attaches a real observed outcome to a previously-returned prediction so
+    post-processing fairness metrics (Equalized Odds, Calibration) can be
+    computed against ground truth rather than the model's own predictions.
+    """
+    correlation_id: str = Field(
+        ...,
+        min_length=8,
+        max_length=64,
+        description="Correlation ID returned by the original prediction response.",
+    )
+    ground_truth: int = Field(
+        ...,
+        ge=0,
+        le=100,
+        description=(
+            "Observed outcome label. For binary tasks (hiring, loan): 0 or 1. "
+            "For multiclass (social): the observed class id. Values > 100 rejected."
+        ),
+    )
+
+    @field_validator("correlation_id")
+    @classmethod
+    def cid_clean(cls, v: str) -> str:
+        return _guard_injection(v, "correlation_id")
+
+    model_config = {"str_strip_whitespace": True, "extra": "forbid"}
+
+
+class FeedbackResponse(BaseModel):
+    correlation_id: str
+    updated:        bool
+    message:        str
