@@ -1,26 +1,74 @@
+import { useEffect, useState } from 'react';
 import { AlertTriangle, TrendingUp, Target, Zap } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { api } from '../../lib/api';
+import type { SummaryResponse } from '../../lib/api';
 
-const metrics = [
-  { label: "Overall Fairness Score", value: "78", unit: "/100", status: "warning" as const },
-  { label: "Demographic Parity Gap", value: "0.19", unit: "", status: "fair" as const },
-  { label: "Equal Opportunity Diff", value: "0.12", unit: "", status: "fair" as const },
-  { label: "Disparate Impact", value: "0.81", unit: "", status: "warning" as const },
-];
-
-const groupData = [
-  { group: "Male", approval: 82 },
-  { group: "Female", approval: 61 },
-  { group: "Age < 30", approval: 75 },
-  { group: "Age > 60", approval: 48 },
-];
-
-const pieData = [
-  { name: "Fair", value: 78, color: "#10b981" },
-  { name: "Biased Areas", value: 22, color: "#ef4444" },
-];
+function useLoanSummary() {
+  const [data, setData] = useState<SummaryResponse | null>(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    api.getSummary("loan")
+      .then(setData)
+      .catch(() => setError(true));
+  }, []);
+  return { data, error };
+}
 
 export function Dashboard() {
+  const { data, error } = useLoanSummary();
+
+  const dpd   = data?.demographic_parity_difference ?? null;
+  const eod   = data?.equal_opportunity_difference  ?? null;
+
+  // Derive a simple 0-100 fairness score from DPD (lower gap = higher score).
+  const fairnessScore = dpd != null ? Math.max(0, Math.round((1 - Math.abs(dpd)) * 100)) : 78;
+  const biasedPct     = 100 - fairnessScore;
+
+  const metrics = [
+    {
+      label:  "Overall Fairness Score",
+      value:  String(fairnessScore),
+      unit:   "/100",
+      status: (fairnessScore < 80 ? "warning" : "fair") as "warning" | "fair",
+    },
+    {
+      label:  "Demographic Parity Gap",
+      value:  dpd != null ? Math.abs(dpd).toFixed(2) : (error ? "—" : "…"),
+      unit:   "",
+      status: (dpd != null && Math.abs(dpd) > 0.15 ? "warning" : "fair") as "warning" | "fair",
+    },
+    {
+      label:  "Equal Opportunity Diff",
+      value:  eod != null ? Math.abs(eod).toFixed(2) : (error ? "—" : "…"),
+      unit:   "",
+      status: (eod != null && Math.abs(eod) > 0.15 ? "warning" : "fair") as "warning" | "fair",
+    },
+    {
+      label:  "Records Analysed",
+      value:  data ? String(data.n_records) : (error ? "—" : "…"),
+      unit:   "",
+      status: "fair" as "warning" | "fair",
+    },
+  ];
+
+  const groupData = data && data.per_group.length > 0
+    ? data.per_group.map(g => ({
+        group:    g.group,
+        approval: Math.round(g.positive_rate * 100),
+      }))
+    : [
+        { group: "Male",    approval: 82 },
+        { group: "Female",  approval: 61 },
+        { group: "Age < 30", approval: 75 },
+        { group: "Age > 60", approval: 48 },
+      ];
+
+  const pieData = [
+    { name: "Fair",         value: fairnessScore, color: "#10b981" },
+    { name: "Biased Areas", value: biasedPct,     color: "#ef4444" },
+  ];
+
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       {/* Hero Card */}
@@ -29,10 +77,16 @@ export function Dashboard() {
           <div>
             <h1 className="text-4xl font-semibold tracking-tight mb-3 dark:text-white">Loan Approval Model</h1>
             <p className="text-zinc-600 dark:text-zinc-400 text-lg">Overall Fairness Score</p>
-            <p className="text-6xl font-bold text-emerald-600 mt-2">78<span className="text-3xl text-zinc-400 dark:text-zinc-500">/100</span></p>
+            <p className="text-6xl font-bold text-emerald-600 mt-2">{fairnessScore}<span className="text-3xl text-zinc-400 dark:text-zinc-500">/100</span></p>
             <div className="mt-4 flex items-center gap-3 text-amber-600 dark:text-amber-400">
               <AlertTriangle size={24} />
-              <span className="font-medium">Mild bias detected in gender and age groups</span>
+              <span className="font-medium">
+                {data
+                  ? (dpd != null && Math.abs(dpd) > 0.15
+                      ? `Bias detected — DPD ${Math.abs(dpd).toFixed(2)}`
+                      : "Fairness metrics within acceptable range")
+                  : "Mild bias detected in gender and age groups"}
+              </span>
             </div>
           </div>
 

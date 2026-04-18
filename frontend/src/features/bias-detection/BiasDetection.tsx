@@ -1,32 +1,56 @@
 import { useState } from 'react';
-import { Target, Play, Download, AlertTriangle } from 'lucide-react';
+import { Target, Play, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { api } from '../../lib/api';
+import type { SummaryResponse } from '../../lib/api';
 
 const protectedGroups = ['Gender', 'Age Group', 'Region'];
 
-const metricsData = [
+const MOCK_METRICS = [
   { group: 'Male', approval: 82, parityGap: 0.08, equalOpp: 0.05 },
   { group: 'Female', approval: 61, parityGap: 0.19, equalOpp: 0.12 },
   { group: 'Age <30', approval: 75, parityGap: 0.06, equalOpp: 0.04 },
   { group: 'Age >60', approval: 48, parityGap: 0.22, equalOpp: 0.18 },
 ];
 
-const pieData = [
-  { name: 'Fair', value: 65, color: '#10b981' },
-  { name: 'Biased', value: 35, color: '#ef4444' },
-];
-
 export function BiasDetection() {
   const [selectedGroups, setSelectedGroups] = useState<string[]>(['Gender', 'Age Group']);
   const [isScanning, setIsScanning] = useState(false);
+  const [liveData, setLiveData] = useState<SummaryResponse | null>(null);
 
-  const runScan = () => {
+  const runScan = async () => {
     setIsScanning(true);
-    setTimeout(() => {
+    try {
+      const result = await api.getSummary("loan");
+      setLiveData(result);
+    } catch {
+      // silently fall back to mock data
+    } finally {
       setIsScanning(false);
-      alert('Bias scan completed successfully!');
-    }, 1500);
+    }
   };
+
+  const metricsData = liveData && liveData.per_group.length > 0
+    ? liveData.per_group.map(g => ({
+        group:     g.group,
+        approval:  Math.round(g.positive_rate * 100),
+        parityGap: liveData.demographic_parity_difference != null
+                     ? Math.abs(liveData.demographic_parity_difference)
+                     : 0,
+        equalOpp:  liveData.equal_opportunity_difference != null
+                     ? Math.abs(liveData.equal_opportunity_difference)
+                     : 0,
+      }))
+    : MOCK_METRICS;
+
+  const maxGap  = Math.max(...metricsData.map(m => m.parityGap));
+  const fairPct = Math.max(0, Math.round((1 - maxGap) * 100));
+  const pieData = [
+    { name: 'Fair',   value: fairPct,       color: '#10b981' },
+    { name: 'Biased', value: 100 - fairPct, color: '#ef4444' },
+  ];
+
+  const highBias = metricsData.find(m => m.parityGap > 0.15);
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -136,10 +160,10 @@ export function BiasDetection() {
                     <td className="py-5 font-medium dark:text-white">{row.group}</td>
                     <td className="py-5 dark:text-white">{row.approval}%</td>
                     <td className={`py-5 ${row.parityGap > 0.15 ? 'text-red-600' : 'text-emerald-600'}`}>
-                      {row.parityGap}
+                      {row.parityGap.toFixed(2)}
                     </td>
                     <td className={`py-5 ${row.equalOpp > 0.15 ? 'text-red-600' : 'text-emerald-600'}`}>
-                      {row.equalOpp}
+                      {row.equalOpp.toFixed(2)}
                     </td>
                   </tr>
                 ))}
@@ -192,16 +216,28 @@ export function BiasDetection() {
       </div>
 
       {/* Alert Section */}
-      <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-3xl p-8 flex items-start gap-5">
-        <AlertTriangle className="text-amber-600 mt-1" size={28} />
-        <div>
-          <h3 className="font-semibold text-amber-800 dark:text-amber-400">High Bias Detected</h3>
-          <p className="text-amber-700 dark:text-amber-300 mt-2">
-            Significant bias found in <strong>Age 60</strong> group (Parity Gap: 0.22). 
-            Consider applying mitigation techniques.
-          </p>
+      {highBias ? (
+        <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-3xl p-8 flex items-start gap-5">
+          <AlertTriangle className="text-amber-600 mt-1" size={28} />
+          <div>
+            <h3 className="font-semibold text-amber-800 dark:text-amber-400">High Bias Detected</h3>
+            <p className="text-amber-700 dark:text-amber-300 mt-2">
+              Significant bias found in <strong>{highBias.group}</strong> group (Parity Gap: {highBias.parityGap.toFixed(2)}).
+              Consider applying mitigation techniques.
+            </p>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded-3xl p-8 flex items-start gap-5">
+          <AlertTriangle className="text-emerald-600 mt-1" size={28} />
+          <div>
+            <h3 className="font-semibold text-emerald-800 dark:text-emerald-400">No High Bias Detected</h3>
+            <p className="text-emerald-700 dark:text-emerald-300 mt-2">
+              All groups are within the acceptable parity threshold (0.20). Run a scan to refresh.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

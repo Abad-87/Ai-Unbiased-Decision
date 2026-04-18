@@ -541,7 +541,7 @@ def _build_population_arrays(
     sensitive_attr:   str,
     sensitive_value:  str,
     current_features: Dict[str, Any],
-) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], List[str]]:
+) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], List[str], Optional[np.ndarray]]:
     """
     Extract aligned (g_vec, feature_matrix, feat_names) from history.
 
@@ -556,7 +556,7 @@ def _build_population_arrays(
         if isinstance(v, (int, float))
     ]
     if not feat_names:
-        return None, None, []
+        return None, None, [], None
 
     g_list:   List[float]       = []
     row_list: List[List[float]] = []

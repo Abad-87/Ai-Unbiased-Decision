@@ -51,6 +51,15 @@ def predict(
     if hasattr(model, "predict_proba"):
         proba      = model.predict_proba(input_row)[0]
         confidence = round(float(proba[1]), 4)
+        # Apply the same balanced-decision policy used by the hiring predictor
+        # so behaviour is consistent across binary-classification domains.
+        positive_threshold, negative_threshold = _resolve_thresholds()
+        prediction = _balanced_binary_decision(
+            positive_confidence=confidence,
+            model_prediction=prediction,
+            positive_threshold=positive_threshold,
+            negative_threshold=negative_threshold,
+        )
 
     bias_risk = compute_bias_risk_score(
         confidence     = confidence,

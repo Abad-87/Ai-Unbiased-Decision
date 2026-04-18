@@ -30,8 +30,10 @@ jobs:
           cache: "pip"
           cache-dependency-path: requirements.txt
 
-      - name: Install dependencies
-        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Install dependencies (prod + dev)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements-dev.txt
 
       - name: Generate dummy models for tests
         run: python create_dummy_models.py

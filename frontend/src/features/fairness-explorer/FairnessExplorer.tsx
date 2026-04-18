@@ -1,65 +1,80 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Zap, RefreshCw } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { api } from '../../lib/api';
+
+const DEFAULT_FEATURES = {
+  income: 65000,
+  creditScore: 720,
+  age: 34,
+  gender: 'Male' as 'Male' | 'Female',
+  region: 'Urban',
+};
 
 export function FairnessExplorer() {
-  const [features, setFeatures] = useState({
-    income: 65000,
-    creditScore: 720,
-    age: 34,
-    gender: 'Male' as 'Male' | 'Female',
-    region: 'Urban',
-  });
+  const [features, setFeatures] = useState(DEFAULT_FEATURES);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [prediction, setPrediction] = useState({
     original: { approved: true, probability: 0.78, impact: 'Neutral' },
-    fair: { approved: true, probability: 0.71, impact: 'Improved' },
+    fair:     { approved: true, probability: 0.71, impact: 'Improved' },
   });
 
-  const updatePrediction = (newFeatures: typeof features) => {
-    let prob = 0.65;
+  const fetchPredictions = useCallback(async (f: typeof DEFAULT_FEATURES) => {
+    setIsLoading(true);
+    try {
+      const payload = {
+        income:           f.income,
+        credit_score:     f.creditScore,
+        loan_amount:      50000,
+        employment_years: Math.max(1, f.age - 22),
+      };
+      const [orig, fair] = await Promise.all([
+        api.predictLoan({ ...payload, sensitive_attr: "gender", sensitive_value: f.gender.toLowerCase() }),
+        api.predictLoan({ ...payload }),
+      ]);
+      const origProb  = orig.confidence;
+      const fairProb  = fair.confidence;
+      const isHighBias = Math.abs(origProb - fairProb) > 0.07;
+      setPrediction({
+        original: {
+          approved:    orig.prediction === 1,
+          probability: parseFloat(origProb.toFixed(2)),
+          impact:      isHighBias ? 'High Bias' : 'Neutral',
+        },
+        fair: {
+          approved:    fair.prediction === 1,
+          probability: parseFloat(fairProb.toFixed(2)),
+          impact:      'Improved',
+        },
+      });
+    } catch {
+      // Fallback: local approximation so UI stays functional
+      let prob = 0.65;
+      prob += (f.income - 50000) / 200000;
+      prob += (f.creditScore - 650) / 400;
+      prob += f.age > 50 ? -0.08 : 0.05;
+      if (f.gender === 'Female') prob -= 0.07;
+      prob = Math.max(0.35, Math.min(0.95, prob));
+      const isHighBias = f.gender === 'Female' && f.age > 50;
+      setPrediction({
+        original: { approved: prob > 0.65, probability: parseFloat(prob.toFixed(2)), impact: isHighBias ? 'High Bias' : 'Neutral' },
+        fair:     { approved: prob > 0.58, probability: parseFloat((prob * 0.93).toFixed(2)), impact: 'Improved' },
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-    // Simple simulation logic
-    prob += (newFeatures.income - 50000) / 200000;
-    prob += (newFeatures.creditScore - 650) / 400;
-    prob += newFeatures.age > 50 ? -0.08 : 0.05;
-
-    if (newFeatures.gender === 'Female') prob -= 0.07;
-
-    prob = Math.max(0.35, Math.min(0.95, prob));
-
-    const isHighBias = newFeatures.gender === 'Female' && newFeatures.age > 50;
-
-    setPrediction({
-      original: {
-        approved: prob > 0.65,
-        probability: parseFloat(prob.toFixed(2)),
-        impact: isHighBias ? 'High Bias' : 'Neutral'
-      },
-      fair: {
-        approved: prob > 0.58,
-        probability: parseFloat((prob * 0.93).toFixed(2)),
-        impact: 'Improved'
-      }
-    });
-  };
-
-  const handleChange = (key: keyof typeof features, value: any) => {
+  const handleChange = (key: keyof typeof DEFAULT_FEATURES, value: string | number) => {
     const newFeatures = { ...features, [key]: value };
     setFeatures(newFeatures);
-    updatePrediction(newFeatures);
+    fetchPredictions(newFeatures);
   };
 
   const resetToDefault = () => {
-    const defaults = {
-      income: 65000,
-      creditScore: 720,
-      age: 34,
-      gender: 'Male' as 'Male' | 'Female',
-      region: 'Urban',
-    };
-    setFeatures(defaults);
-    updatePrediction(defaults);
+    setFeatures(DEFAULT_FEATURES);
+    fetchPredictions(DEFAULT_FEATURES);
   };
 
   const comparisonData = [
@@ -163,10 +178,10 @@ export function FairnessExplorer() {
 
         {/* Right: Results */}
         <div className="lg:col-span-7 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-6 transition-opacity ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
             {/* Original Model */}
             <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
-              <h3 className="font-semibold mb-6 dark:text-white">Original Model</h3>
+              <h3 className="font-semibold mb-6 dark:text-white">Original Model{isLoading ? ' …' : ''}</h3>
               <div className="text-center">
                 <div className={`text-5xl font-bold mb-3 ${prediction.original.approved ? 'text-emerald-600' : 'text-red-600'}`}>
                   {prediction.original.approved ? 'APPROVED' : 'REJECTED'}

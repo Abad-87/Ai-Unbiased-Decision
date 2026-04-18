@@ -94,6 +94,11 @@ def _parse_frontend_origins() -> list[str]:
     raw = os.getenv("FRONTEND_ORIGINS", "").strip()
     if raw:
         return [origin.strip() for origin in raw.split(",") if origin.strip()]
+    if os.getenv("ENVIRONMENT", "development").lower() == "production":
+        raise RuntimeError(
+            "FRONTEND_ORIGINS is required in production. "
+            "Set it in the Render dashboard, e.g. 'https://your-frontend.netlify.app'."
+        )
     return [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
@@ -102,7 +107,9 @@ def _parse_frontend_origins() -> list[str]:
     ]
 
 
-_FRONTEND_ORIGINS = _parse_frontend_origins()
+_FRONTEND_ORIGINS   = _parse_frontend_origins()
+# Browsers reject "Access-Control-Allow-Origin: *" with credentials=True.
+_ALLOW_CREDENTIALS  = "*" not in _FRONTEND_ORIGINS
 _rate_limiter_store: dict[str, deque[float]] = defaultdict(deque)
 _rate_limiter_lock = asyncio.Lock()
 _rate_limiter_ops = 0
@@ -151,8 +158,10 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_FRONTEND_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"], allow_headers=["*"],
+    allow_credentials=_ALLOW_CREDENTIALS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Correlation-ID", "X-Response-Time"],
 )
 
 
@@ -210,6 +219,13 @@ async def pydantic_handler(request: Request, exc: ValidationError):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    # Don't swallow FastAPI/Starlette HTTPExceptions — they encode intentional
+    # 4xx responses (e.g. 404 from insights_router) and must pass through.
+    from fastapi import HTTPException as _FastHTTP
+    from starlette.exceptions import HTTPException as _StarHTTP
+    if isinstance(exc, (_FastHTTP, _StarHTTP)):
+        raise exc
+
     correlation_id = getattr(request.state, "correlation_id", "unknown")
     logger.error(f"[{correlation_id}] Unhandled on {request.url.path}: {exc}")
     return JSONResponse(
@@ -427,6 +443,8 @@ def root():
         "status":   "online",
         "platform": "Quantum – Unbiased AI Decision Platform",
         "version":  "4.0.0",
+        "commit":   os.getenv("RENDER_GIT_COMMIT", "dev"),
+        "environment": os.getenv("ENVIRONMENT", "development"),
         "security": {
             "pii_masking":      os.getenv("PII_MASK_ENABLED", "true"),
             "input_validation": "strict Pydantic v2 + injection guards",
@@ -453,11 +471,13 @@ def root():
 @app.get("/health", tags=["Platform"])
 def health_check():
     from utils.shap_cache import shap_cache, ws_manager
-    audit_path = Path("logs/audit.jsonl")
+    from utils.logger import AUDIT_LOG_PATH
+    audit_path = AUDIT_LOG_PATH
     return {
         "status":    "healthy",
         "timestamp": time.time(),
         "version":   "4.0.0",
+        "commit":    os.getenv("RENDER_GIT_COMMIT", "dev"),
         "models":    registry.list_models(),
         "audit_log": {
             "path":       str(audit_path),
