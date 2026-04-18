@@ -1,0 +1,207 @@
+import { useState } from 'react';
+import { Target, Play, Download, AlertTriangle } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+
+const protectedGroups = ['Gender', 'Age Group', 'Region'];
+
+const metricsData = [
+  { group: 'Male', approval: 82, parityGap: 0.08, equalOpp: 0.05 },
+  { group: 'Female', approval: 61, parityGap: 0.19, equalOpp: 0.12 },
+  { group: 'Age <30', approval: 75, parityGap: 0.06, equalOpp: 0.04 },
+  { group: 'Age >60', approval: 48, parityGap: 0.22, equalOpp: 0.18 },
+];
+
+const pieData = [
+  { name: 'Fair', value: 65, color: '#10b981' },
+  { name: 'Biased', value: 35, color: '#ef4444' },
+];
+
+export function BiasDetection() {
+  const [selectedGroups, setSelectedGroups] = useState<string[]>(['Gender', 'Age Group']);
+  const [isScanning, setIsScanning] = useState(false);
+
+  const runScan = () => {
+    setIsScanning(true);
+    setTimeout(() => {
+      setIsScanning(false);
+      alert('Bias scan completed successfully!');
+    }, 1500);
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold dark:text-white flex items-center gap-3">
+            <Target className="text-emerald-600" size={32} />
+            Bias Detection
+          </h1>
+          <p className="text-zinc-600 dark:text-zinc-400 mt-1">Analyze and detect bias in your AI model</p>
+        </div>
+        <button
+          onClick={runScan}
+          disabled={isScanning}
+          className="flex items-center gap-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white px-8 py-3 rounded-2xl font-medium transition-all active:scale-95"
+        >
+          <Play size={20} />
+          {isScanning ? 'Scanning...' : 'Run Full Bias Scan'}
+        </button>
+      </div>
+
+      {/* Configuration Panel */}
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
+        <h2 className="text-xl font-semibold mb-6 dark:text-white">Scan Configuration</h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div>
+            <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-3">
+              Protected Attributes
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {protectedGroups.map((group) => (
+                <button
+                  key={group}
+                  onClick={() => {
+                    setSelectedGroups(prev =>
+                      prev.includes(group)
+                        ? prev.filter(g => g !== group)
+                        : [...prev, group]
+                    );
+                  }}
+                  className={`px-5 py-2.5 rounded-2xl text-sm transition-all ${
+                    selectedGroups.includes(group)
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                  }`}
+                >
+                  {group}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-3">
+              Fairness Metrics
+            </label>
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-3">
+                <input type="checkbox" defaultChecked className="w-4 h-4 accent-emerald-600" />
+                <span className="dark:text-white">Demographic Parity</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <input type="checkbox" defaultChecked className="w-4 h-4 accent-emerald-600" />
+                <span className="dark:text-white">Equal Opportunity</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <input type="checkbox" defaultChecked className="w-4 h-4 accent-emerald-600" />
+                <span className="dark:text-white">Disparate Impact</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-3">
+              Acceptable Threshold
+            </label>
+            <div className="text-4xl font-semibold dark:text-white">0.20</div>
+            <p className="text-xs text-zinc-500 mt-1">Maximum allowed disparity</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Results Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Metrics Summary Table */}
+        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
+          <h2 className="text-xl font-semibold mb-6 dark:text-white flex items-center gap-2">
+            Metrics Summary
+            <span className="text-emerald-600 text-sm font-normal">(Lower is better)</span>
+          </h2>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b dark:border-zinc-700">
+                  <th className="text-left py-4 text-zinc-600 dark:text-zinc-400 font-medium">Group</th>
+                  <th className="text-left py-4 text-zinc-600 dark:text-zinc-400 font-medium">Approval Rate</th>
+                  <th className="text-left py-4 text-zinc-600 dark:text-zinc-400 font-medium">Parity Gap</th>
+                  <th className="text-left py-4 text-zinc-600 dark:text-zinc-400 font-medium">Equal Opp. Diff</th>
+                </tr>
+              </thead>
+              <tbody>
+                {metricsData.map((row, i) => (
+                  <tr key={i} className="border-b dark:border-zinc-700 last:border-0">
+                    <td className="py-5 font-medium dark:text-white">{row.group}</td>
+                    <td className="py-5 dark:text-white">{row.approval}%</td>
+                    <td className={`py-5 ${row.parityGap > 0.15 ? 'text-red-600' : 'text-emerald-600'}`}>
+                      {row.parityGap}
+                    </td>
+                    <td className={`py-5 ${row.equalOpp > 0.15 ? 'text-red-600' : 'text-emerald-600'}`}>
+                      {row.equalOpp}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Charts */}
+        <div className="space-y-8">
+          {/* Approval Rate Chart */}
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
+            <h2 className="text-xl font-semibold mb-6 dark:text-white">Approval Rate by Group</h2>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={metricsData}>
+                <XAxis dataKey="group" tick={{ fill: '#71717a' }} />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="approval" radius={12} fill="#10b981" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Bias Distribution */}
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
+            <h2 className="text-xl font-semibold mb-6 dark:text-white">Overall Bias Distribution</h2>
+            <div className="flex justify-center">
+              <div className="w-64 h-64">
+                <ResponsiveContainer>
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={70}
+                      outerRadius={100}
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Alert Section */}
+      <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-3xl p-8 flex items-start gap-5">
+        <AlertTriangle className="text-amber-600 mt-1" size={28} />
+        <div>
+          <h3 className="font-semibold text-amber-800 dark:text-amber-400">High Bias Detected</h3>
+          <p className="text-amber-700 dark:text-amber-300 mt-2">
+            Significant bias found in <strong>Age 60</strong> group (Parity Gap: 0.22). 
+            Consider applying mitigation techniques.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
