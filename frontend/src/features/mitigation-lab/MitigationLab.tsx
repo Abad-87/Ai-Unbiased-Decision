@@ -1,11 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Shield, ArrowRight, CheckCircle, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { api } from '../../lib/api';
+import type { SummaryResponse } from '../../lib/api';
 
 export function MitigationLab() {
   const [selectedTechnique, setSelectedTechnique] = useState<string | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const [mitigated, setMitigated] = useState(false);
+  const [liveData, setLiveData] = useState<SummaryResponse | null>(null);
+
+  useEffect(() => {
+    api.getSummary('loan').then(setLiveData).catch(() => {});
+  }, []);
 
   const techniques = [
     {
@@ -37,19 +44,27 @@ export function MitigationLab() {
     },
   ];
 
-  const beforeData = [
-    { group: 'Male', rate: 82 },
-    { group: 'Female', rate: 61 },
-    { group: 'Age <30', rate: 75 },
-    { group: 'Age >60', rate: 48 },
-  ];
+  const liveGroups = liveData && liveData.per_group.length >= 2 ? liveData.per_group : null;
+  const beforeData = liveGroups
+    ? liveGroups.map(g => ({ group: g.group, rate: Math.round(g.positive_rate * 100) }))
+    : [
+        { group: 'Male', rate: 82 },
+        { group: 'Female', rate: 61 },
+        { group: 'Age <30', rate: 75 },
+        { group: 'Age >60', rate: 48 },
+      ];
 
-  const afterData = [
-    { group: 'Male', rate: 79 },
-    { group: 'Female', rate: 74 },
-    { group: 'Age <30', rate: 73 },
-    { group: 'Age >60', rate: 68 },
-  ];
+  const meanRate = beforeData.reduce((a, b) => a + b.rate, 0) / beforeData.length;
+  const afterData = beforeData.map(g => ({
+    group: g.group,
+    rate: Math.round(g.rate + (meanRate - g.rate) * 0.65),
+  }));
+
+  const dpd = liveData?.demographic_parity_difference;
+  const biasReduction = dpd != null ? Math.round((1 - Math.abs(dpd)) * 100) : 68;
+  const newFairnessScore = mitigated
+    ? Math.min(99, Math.round(biasReduction + (100 - biasReduction) * 0.45))
+    : biasReduction;
 
   const applyMitigation = () => {
     if (!selectedTechnique) return;
@@ -59,7 +74,6 @@ export function MitigationLab() {
     setTimeout(() => {
       setIsApplying(false);
       setMitigated(true);
-      alert(`✅ ${techniques.find(t => t.id === selectedTechnique)?.name} applied successfully!`);
     }, 1800);
   };
 
@@ -178,16 +192,20 @@ export function MitigationLab() {
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="text-center p-6 bg-zinc-50 dark:bg-zinc-800 rounded-2xl">
-                <div className="text-4xl font-bold text-emerald-600">68%</div>
-                <div className="text-sm text-zinc-600 dark:text-zinc-400 mt-2">Average Bias Reduction</div>
+                <div className="text-4xl font-bold text-emerald-600">{biasReduction}%</div>
+                <div className="text-sm text-zinc-600 dark:text-zinc-400 mt-2">Current Fairness Level</div>
               </div>
               <div className="text-center p-6 bg-zinc-50 dark:bg-zinc-800 rounded-2xl">
-                <div className="text-4xl font-bold text-emerald-600">3.2%</div>
-                <div className="text-sm text-zinc-600 dark:text-zinc-400 mt-2">Accuracy Drop</div>
+                <div className="text-4xl font-bold text-emerald-600">
+                  {techniques.find(t => t.id === selectedTechnique)?.accuracyDrop ?? '1-4%'}
+                </div>
+                <div className="text-sm text-zinc-600 dark:text-zinc-400 mt-2">Expected Accuracy Drop</div>
               </div>
               <div className="text-center p-6 bg-zinc-50 dark:bg-zinc-800 rounded-2xl">
-                <div className="text-4xl font-bold text-emerald-600">92</div>
-                <div className="text-sm text-zinc-600 dark:text-zinc-400 mt-2">New Fairness Score</div>
+                <div className="text-4xl font-bold text-emerald-600">{newFairnessScore}</div>
+                <div className="text-sm text-zinc-600 dark:text-zinc-400 mt-2">
+                  {mitigated ? 'New Fairness Score' : 'Projected Score'}
+                </div>
               </div>
             </div>
 
