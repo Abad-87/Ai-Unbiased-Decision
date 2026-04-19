@@ -100,6 +100,11 @@ export interface HiringResponse {
   fairness:         Record<string, unknown>;
   correlation_id:   string;
   message:          string;
+  model_version?:   string;
+  model_variant?:   string;
+  shap_available?:  boolean;
+  shap_poll_url?:   string;
+  shap_status?:     string;
 }
 
 export interface LoanRequest {
@@ -124,6 +129,11 @@ export interface LoanResponse {
   fairness:         Record<string, unknown>;
   correlation_id:   string;
   message:          string;
+  model_version?:   string;
+  model_variant?:   string;
+  shap_available?:  boolean;
+  shap_poll_url?:   string;
+  shap_status?:     string;
 }
 
 export interface SocialRequest {
@@ -149,6 +159,11 @@ export interface SocialResponse {
   fairness:                Record<string, unknown>;
   correlation_id:          string;
   message:                 string;
+  model_version?:          string;
+  model_variant?:          string;
+  shap_available?:         boolean;
+  shap_poll_url?:          string;
+  shap_status?:            string;
 }
 
 export interface FeedbackRequest {
@@ -160,6 +175,75 @@ export interface FeedbackResponse {
   correlation_id: string;
   updated:        boolean;   // backend field is "updated", not "success"
   message:        string;
+}
+
+// ─── File Upload Types ────────────────────────────────────────────────────────
+
+export interface FileMetadata {
+  id: string;
+  filename: string;
+  stored_name: string;
+  size_bytes: number;
+  size_human: string;
+  mime_type: string;
+  category: 'image' | 'document' | 'data' | 'archive' | 'other';
+  extension: string;
+  uploaded_at: string;
+  description?: string;
+  tags: string[];
+}
+
+export interface FileUploadResponse {
+  success: boolean;
+  message: string;
+  file: FileMetadata;
+}
+
+export interface FileListResponse {
+  files: FileMetadata[];
+  total: number;
+  categories: Record<string, number>;
+}
+
+export interface FileStats {
+  total_files: number;
+  total_size_bytes: number;
+  total_size_human: string;
+  by_category: Record<string, number>;
+  by_extension: Record<string, number>;
+  upload_dir: string;
+  max_file_size_mb: number;
+}
+
+// ─── Mitigation Types ─────────────────────────────────────────────────────────
+
+export interface GroupThreshold {
+  group: string;
+  original_threshold: number;
+  new_threshold: number;
+  expected_approval_rate: number;
+}
+
+export interface MitigationResult {
+  success: boolean;
+  message: string;
+  method: string;
+  original_dpd?: number;
+  mitigated_dpd?: number;
+  original_eod?: number;
+  mitigated_eod?: number;
+  improvement_pct: number;
+  new_thresholds: GroupThreshold[];
+  affected_records: number;
+  total_records: number;
+  calibration_adjustments: Record<string, number>;
+}
+
+export interface MitigationMethodInfo {
+  id: string;
+  name: string;
+  description: string;
+  best_for: string[];
 }
 
 // ─── API client ───────────────────────────────────────────────────────────────
@@ -189,4 +273,61 @@ export const api = {
   // Feedback (attach ground-truth to a previous prediction)
   feedback: (body: FeedbackRequest) =>
     post<FeedbackResponse>("/feedback", body),
+
+  // File Upload (images, PDFs, docs, data files)
+  uploadFile: (formData: FormData) => {
+    return fetch(`${BASE}/files/upload`, {
+      method: "POST",
+      body: formData,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail || `Upload failed: ${res.status}`);
+      }
+      return res.json() as Promise<FileUploadResponse>;
+    });
+  },
+
+  listFiles: (params?: { category?: string; domain?: string; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.category) query.append("category", params.category);
+    if (params?.domain) query.append("domain", params.domain);
+    if (params?.limit) query.append("limit", String(params.limit));
+    if (params?.offset) query.append("offset", String(params.offset));
+    return get<FileListResponse>(`/files/list?${query.toString()}`);
+  },
+
+  getFileStats: () =>
+    get<FileStats>("/files/stats"),
+
+  downloadFile: (fileId: string) =>
+    `${BASE}/files/download/${fileId}`,
+
+  previewFile: (fileId: string) =>
+    `${BASE}/files/preview/${fileId}`,
+
+  deleteFile: (fileId: string) =>
+    fetch(`${BASE}/files/delete/${fileId}`, { method: "DELETE" }).then(async (res) => {
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail || `Delete failed: ${res.status}`);
+      }
+      return res.json();
+    }),
+
+  // Mitigation (bias reduction algorithms)
+  listMitigationMethods: () =>
+    get<{ methods: MitigationMethodInfo[] }>("/mitigation/methods"),
+
+  applyMitigation: (body: {
+    domain: "hiring" | "loan" | "social";
+    method: "threshold" | "calibration" | "impact_removal";
+    target_metric?: "demographic_parity" | "equal_opportunity" | "calibration";
+    strength?: number;
+    protected_attribute?: string;
+  }) =>
+    post<MitigationResult>("/mitigation/apply", body),
+
+  previewMitigation: (domain: string, method: string = "threshold") =>
+    get<MitigationResult>(`/mitigation/preview/${domain}?method=${method}`),
 };

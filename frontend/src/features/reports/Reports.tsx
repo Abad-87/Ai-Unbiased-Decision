@@ -1,7 +1,15 @@
 import { useState, useEffect } from 'react';
-import { FileText, Download, Calendar, Eye, CheckCircle, RefreshCw } from 'lucide-react';
+import { FileText, Download, Calendar, Eye, CheckCircle, RefreshCw, History, AlertTriangle } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { SummaryResponse } from '../../lib/api';
+
+interface PredictionRecord {
+  correlation_id: string;
+  input: Record<string, unknown>;
+  prediction: number;
+  confidence: number;
+  timestamp?: string;
+}
 
 type Domain = 'hiring' | 'loan' | 'social';
 const DOMAINS: Domain[] = ['loan', 'hiring', 'social'];
@@ -62,6 +70,34 @@ export function Reports() {
   const avgScore  = loaded.length ? Math.round(loaded.reduce((a, r) => a + (r.fairnessScore ?? 0), 0) / loaded.length) : null;
   const totalRecs = loaded.reduce((a, r) => a + (r.nRecords ?? 0), 0);
 
+  // Recent predictions state
+  const [recentPredictions, setRecentPredictions] = useState<Partial<Record<Domain, PredictionRecord[]>>>({});
+  const [loadingRecent, setLoadingRecent] = useState(true);
+
+  const fetchRecentPredictions = async () => {
+    setLoadingRecent(true);
+    const results = await Promise.allSettled(
+      DOMAINS.map(d => api.getRecent(d))
+    );
+    const next: Partial<Record<Domain, PredictionRecord[]>> = {};
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled' && r.value) {
+        next[DOMAINS[i]] = r.value;
+      }
+    });
+    setRecentPredictions(next);
+    setLoadingRecent(false);
+  };
+
+  useEffect(() => {
+    fetchRecentPredictions();
+  }, []);
+
+  const handleRefreshAll = () => {
+    fetchAll();
+    fetchRecentPredictions();
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       <div className="flex justify-between items-center">
@@ -75,12 +111,12 @@ export function Reports() {
           </p>
         </div>
         <button
-          onClick={fetchAll}
-          disabled={loading}
+          onClick={handleRefreshAll}
+          disabled={loading || loadingRecent}
           className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-2xl flex items-center gap-2 font-medium"
         >
-          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-          {loading ? 'Refreshing…' : 'Refresh Reports'}
+          <RefreshCw size={18} className={loading || loadingRecent ? 'animate-spin' : ''} />
+          {loading || loadingRecent ? 'Refreshing…' : 'Refresh All'}
         </button>
       </div>
 
@@ -178,6 +214,120 @@ export function Reports() {
         </div>
       </div>
 
+      {/* Recent Predictions Section */}
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold dark:text-white flex items-center gap-2">
+            <History size={24} className="text-emerald-600" />
+            Recent Predictions
+          </h2>
+          <span className="text-sm text-zinc-500 dark:text-zinc-400">
+            {loadingRecent ? 'Loading...' : 'From all 3 domains'}
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b dark:border-zinc-700">
+                <th className="text-left py-5 text-zinc-600 dark:text-zinc-400 font-medium">Domain</th>
+                <th className="text-left py-5 text-zinc-600 dark:text-zinc-400 font-medium">Correlation ID</th>
+                <th className="text-left py-5 text-zinc-600 dark:text-zinc-400 font-medium">Prediction</th>
+                <th className="text-left py-5 text-zinc-600 dark:text-zinc-400 font-medium">Confidence</th>
+                <th className="text-left py-5 text-zinc-600 dark:text-zinc-400 font-medium">Key Features</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingRecent ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-zinc-500">
+                    <RefreshCw size={20} className="animate-spin mx-auto mb-2" />
+                    Loading recent predictions...
+                  </td>
+                </tr>
+              ) : DOMAINS.flatMap(d => 
+                (recentPredictions[d] || []).slice(0, 3).map((pred, i) => (
+                  <tr key={`${d}-${i}`} className="border-b dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
+                    <td className="py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        d === 'loan' ? 'bg-emerald-100 text-emerald-700' :
+                        d === 'hiring' ? 'bg-blue-100 text-blue-700' :
+                        'bg-violet-100 text-violet-700'
+                      }`}>
+                        {MODEL_NAMES[d]}
+                      </span>
+                    </td>
+                    <td className="py-4">
+                      <code className="text-sm bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded">
+                        {pred.correlation_id?.slice(0, 8)}...
+                      </code>
+                    </td>
+                    <td className="py-4">
+                      <span className={`font-semibold ${
+                        pred.prediction === 1 ? 'text-emerald-600' : 'text-red-600'
+                      }`}>
+                        {pred.prediction === 1 ? 'Positive' : 'Negative'}
+                      </span>
+                    </td>
+                    <td className="py-4 dark:text-white">
+                      {(pred.confidence * 100).toFixed(1)}%
+                    </td>
+                    <td className="py-4 text-sm text-zinc-500 dark:text-zinc-400">
+                      {pred.input && Object.entries(pred.input).slice(0, 2).map(([k, v]) => (
+                        <span key={k} className="mr-2">{k}: {String(v).slice(0, 15)}</span>
+                      ))}
+                    </td>
+                  </tr>
+                ))
+              ).length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-zinc-500">
+                    <AlertTriangle size={20} className="mx-auto mb-2" />
+                    No recent predictions found. Run predictions to see data.
+                  </td>
+                </tr>
+              ) : (
+                DOMAINS.flatMap(d => 
+                  (recentPredictions[d] || []).slice(0, 3).map((pred, i) => (
+                    <tr key={`${d}-${i}`} className="border-b dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
+                      <td className="py-4">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          d === 'loan' ? 'bg-emerald-100 text-emerald-700' :
+                          d === 'hiring' ? 'bg-blue-100 text-blue-700' :
+                          'bg-violet-100 text-violet-700'
+                        }`}>
+                          {MODEL_NAMES[d]}
+                        </span>
+                      </td>
+                      <td className="py-4">
+                        <code className="text-sm bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded">
+                          {pred.correlation_id?.slice(0, 8)}...
+                        </code>
+                      </td>
+                      <td className="py-4">
+                        <span className={`font-semibold ${
+                          pred.prediction === 1 ? 'text-emerald-600' : 'text-red-600'
+                        }`}>
+                          {pred.prediction === 1 ? 'Positive' : 'Negative'}
+                        </span>
+                      </td>
+                      <td className="py-4 dark:text-white">
+                        {(pred.confidence * 100).toFixed(1)}%
+                      </td>
+                      <td className="py-4 text-sm text-zinc-500 dark:text-zinc-400">
+                        {pred.input && Object.entries(pred.input).slice(0, 2).map(([k, v]) => (
+                          <span key={k} className="mr-2">{k}: {String(v).slice(0, 15)}</span>
+                        ))}
+                      </td>
+                    </tr>
+                  ))
+                )
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Compliance Note */}
       <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 flex items-start gap-6">
         <CheckCircle className="text-emerald-600 mt-1" size={28} />
@@ -186,6 +336,7 @@ export function Reports() {
           <p className="text-zinc-600 dark:text-zinc-400 mt-2">
             All reports include live DPD, EOD, per-group approval rates, and bias risk bands.
             Click the eye icon to export raw JSON for internal audits and regulatory submissions.
+            Use the Feedback feature to submit ground truth and enable Equalized Odds calculations.
           </p>
         </div>
       </div>

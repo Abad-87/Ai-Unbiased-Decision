@@ -1,52 +1,73 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, TrendingUp, Target, Zap } from 'lucide-react';
+import { AlertTriangle, TrendingUp, Target, Zap, Briefcase, DollarSign, Share2, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { api } from '../../lib/api';
 import type { SummaryResponse } from '../../lib/api';
 
-function useLoanSummary() {
+type Domain = 'loan' | 'hiring' | 'social';
+
+interface DomainConfig {
+  id: Domain;
+  label: string;
+  icon: typeof DollarSign;
+  color: string;
+}
+
+const DOMAINS: DomainConfig[] = [
+  { id: 'loan', label: 'Loan Approval', icon: DollarSign, color: 'emerald' },
+  { id: 'hiring', label: 'Hiring Decision', icon: Briefcase, color: 'blue' },
+  { id: 'social', label: 'Social Recommend', icon: Share2, color: 'violet' },
+];
+
+function useDomainSummary(domain: Domain) {
   const [data, setData] = useState<SummaryResponse | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  
   useEffect(() => {
-    api.getSummary("loan")
+    setLoading(true);
+    api.getSummary(domain)
       .then(setData)
-      .catch(() => setError(true));
-  }, []);
-  return { data, error };
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }, [domain]);
+  
+  return { data, loading, error };
 }
 
 export function Dashboard() {
-  const { data, error } = useLoanSummary();
+  const [activeDomain, setActiveDomain] = useState<Domain>('loan');
+  const { data, loading, error } = useDomainSummary(activeDomain);
 
   const dpd   = data?.demographic_parity_difference ?? null;
   const eod   = data?.equal_opportunity_difference  ?? null;
 
   // Derive a simple 0-100 fairness score from DPD (lower gap = higher score).
-  const fairnessScore = dpd != null ? Math.max(0, Math.round((1 - Math.abs(dpd)) * 100)) : 78;
+  const fairnessScore = dpd != null ? Math.max(0, Math.round((1 - Math.abs(dpd)) * 100)) : (error ? 0 : 78);
   const biasedPct     = 100 - fairnessScore;
 
   const metrics = [
     {
       label:  "Overall Fairness Score",
-      value:  String(fairnessScore),
+      value:  loading ? "…" : String(fairnessScore),
       unit:   "/100",
       status: (fairnessScore < 80 ? "warning" : "fair") as "warning" | "fair",
     },
     {
       label:  "Demographic Parity Gap",
-      value:  dpd != null ? Math.abs(dpd).toFixed(2) : (error ? "—" : "…"),
+      value:  loading ? "…" : (dpd != null ? Math.abs(dpd).toFixed(2) : (error ? "—" : "N/A")),
       unit:   "",
       status: (dpd != null && Math.abs(dpd) > 0.15 ? "warning" : "fair") as "warning" | "fair",
     },
     {
       label:  "Equal Opportunity Diff",
-      value:  eod != null ? Math.abs(eod).toFixed(2) : (error ? "—" : "…"),
+      value:  loading ? "…" : (eod != null ? Math.abs(eod).toFixed(2) : (error ? "—" : "N/A")),
       unit:   "",
       status: (eod != null && Math.abs(eod) > 0.15 ? "warning" : "fair") as "warning" | "fair",
     },
     {
       label:  "Records Analysed",
-      value:  data ? String(data.n_records) : (error ? "—" : "…"),
+      value:  loading ? "…" : (data ? String(data.n_records) : (error ? "—" : "0")),
       unit:   "",
       status: "fair" as "warning" | "fair",
     },
@@ -58,10 +79,10 @@ export function Dashboard() {
         approval: Math.round(g.positive_rate * 100),
       }))
     : [
-        { group: "Male",    approval: 82 },
-        { group: "Female",  approval: 61 },
-        { group: "Age < 30", approval: 75 },
-        { group: "Age > 60", approval: 48 },
+        { group: "Group A", approval: 82 },
+        { group: "Group B", approval: 61 },
+        { group: "Group C", approval: 75 },
+        { group: "Group D", approval: 48 },
       ];
 
   const pieData = [
@@ -69,23 +90,58 @@ export function Dashboard() {
     { name: "Biased Areas", value: biasedPct,     color: "#ef4444" },
   ];
 
+  const activeDomainConfig = DOMAINS.find(d => d.id === activeDomain);
+  const activeIcon = activeDomainConfig?.icon || DollarSign;
+  const activeColor = activeDomainConfig?.color || 'emerald';
+
   return (
     <div className="max-w-7xl mx-auto space-y-8">
+      {/* Domain Selector */}
+      <div className="flex gap-3">
+        {DOMAINS.map(domain => {
+          const Icon = domain.icon;
+          const isActive = activeDomain === domain.id;
+          return (
+            <button
+              key={domain.id}
+              onClick={() => setActiveDomain(domain.id)}
+              className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-medium transition-all ${
+                isActive
+                  ? `bg-${domain.color}-600 text-white`
+                  : 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50'
+              }`}
+            >
+              <Icon size={20} />
+              {domain.label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Hero Card */}
       <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 shadow-sm border border-zinc-100 dark:border-zinc-800">
         <div className="flex flex-col lg:flex-row justify-between items-start gap-8">
           <div>
-            <h1 className="text-4xl font-semibold tracking-tight mb-3 dark:text-white">Loan Approval Model</h1>
+            <div className="flex items-center gap-4 mb-3">
+              <activeIcon className={`text-${activeColor}-600`} size={40} />
+              <h1 className="text-4xl font-semibold tracking-tight dark:text-white">
+                {activeDomainConfig?.label} Model
+              </h1>
+              {loading && <Loader2 className="animate-spin text-zinc-400" size={24} />}
+            </div>
             <p className="text-zinc-600 dark:text-zinc-400 text-lg">Overall Fairness Score</p>
-            <p className="text-6xl font-bold text-emerald-600 mt-2">{fairnessScore}<span className="text-3xl text-zinc-400 dark:text-zinc-500">/100</span></p>
+            <p className={`text-6xl font-bold text-${activeColor}-600 mt-2`}>
+              {loading ? "…" : fairnessScore}
+              <span className="text-3xl text-zinc-400 dark:text-zinc-500">/100</span>
+            </p>
             <div className="mt-4 flex items-center gap-3 text-amber-600 dark:text-amber-400">
               <AlertTriangle size={24} />
               <span className="font-medium">
-                {data
-                  ? (dpd != null && Math.abs(dpd) > 0.15
+                {loading ? "Loading fairness metrics..." : 
+                  data ? (dpd != null && Math.abs(dpd) > 0.15
                       ? `Bias detected — DPD ${Math.abs(dpd).toFixed(2)}`
                       : "Fairness metrics within acceptable range")
-                  : "Mild bias detected in gender and age groups"}
+                  : error ? "Failed to load fairness data" : "No data available yet"}
               </span>
             </div>
           </div>
@@ -118,12 +174,12 @@ export function Dashboard() {
           <div key={i} className="bg-white dark:bg-zinc-900 rounded-3xl p-7 shadow-sm border border-zinc-100 dark:border-zinc-800">
             <div className="flex justify-between items-start">
               <p className="text-zinc-600 dark:text-zinc-400">{metric.label}</p>
-              {metric.status === "warning" && <AlertTriangle className="text-amber-500" size={22} />}
+              {metric.status === "warning" && !loading && <AlertTriangle className="text-amber-500" size={22} />}
             </div>
             <p className="text-5xl font-semibold mt-6 dark:text-white">{metric.value}{metric.unit}</p>
             <div className="mt-6 flex items-center gap-2 text-emerald-600 text-sm">
               <TrendingUp size={16} />
-              <span>Improved from last scan</span>
+              <span>Live metrics from {activeDomainConfig?.label}</span>
             </div>
           </div>
         ))}
@@ -132,8 +188,12 @@ export function Dashboard() {
       {/* Group Comparison Chart */}
       <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 shadow-sm border border-zinc-100 dark:border-zinc-800">
         <div className="flex items-center justify-between mb-8">
-          <h2 className="text-2xl font-semibold dark:text-white">Approval Rate by Protected Group</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Red bars indicate potential bias</p>
+          <h2 className="text-2xl font-semibold dark:text-white">
+            {activeDomain === 'loan' ? 'Approval' : activeDomain === 'hiring' ? 'Hiring' : 'Engagement'} Rate by Protected Group
+          </h2>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            {loading ? 'Loading data...' : error ? 'Failed to load data' : `Showing ${data?.n_records || 0} records`}
+          </p>
         </div>
 
         <ResponsiveContainer width="100%" height={380}>

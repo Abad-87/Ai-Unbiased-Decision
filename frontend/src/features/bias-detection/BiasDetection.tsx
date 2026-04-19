@@ -1,10 +1,25 @@
 import { useState } from 'react';
-import { Target, Play, AlertTriangle } from 'lucide-react';
+import { Target, Play, AlertTriangle, Briefcase, DollarSign, Share2, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { api } from '../../lib/api';
 import type { SummaryResponse } from '../../lib/api';
 
-const protectedGroups = ['Gender', 'Age Group', 'Region'];
+type Domain = 'loan' | 'hiring' | 'social';
+
+interface DomainConfig {
+  id: Domain;
+  label: string;
+  icon: typeof DollarSign;
+  color: string;
+}
+
+const DOMAINS: DomainConfig[] = [
+  { id: 'loan', label: 'Loan Approval', icon: DollarSign, color: 'emerald' },
+  { id: 'hiring', label: 'Hiring Decision', icon: Briefcase, color: 'blue' },
+  { id: 'social', label: 'Social Recommend', icon: Share2, color: 'violet' },
+];
+
+const protectedGroups = ['Gender', 'Age Group', 'Region', 'Ethnicity', 'Religion'];
 
 const MOCK_METRICS = [
   { group: 'Male', approval: 82, parityGap: 0.08, equalOpp: 0.05 },
@@ -14,6 +29,7 @@ const MOCK_METRICS = [
 ];
 
 export function BiasDetection() {
+  const [activeDomain, setActiveDomain] = useState<Domain>('loan');
   const [selectedGroups, setSelectedGroups] = useState<string[]>(['Gender', 'Age Group']);
   const [isScanning, setIsScanning] = useState(false);
   const [liveData, setLiveData] = useState<SummaryResponse | null>(null);
@@ -21,7 +37,7 @@ export function BiasDetection() {
   const runScan = async () => {
     setIsScanning(true);
     try {
-      const result = await api.getSummary("loan");
+      const result = await api.getSummary(activeDomain);
       setLiveData(result);
     } catch {
       // silently fall back to mock data
@@ -51,6 +67,7 @@ export function BiasDetection() {
   ];
 
   const highBias = metricsData.find(m => m.parityGap > 0.15);
+  const activeDomainConfig = DOMAINS.find(d => d.id === activeDomain);
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -61,16 +78,43 @@ export function BiasDetection() {
             <Target className="text-emerald-600" size={32} />
             Bias Detection
           </h1>
-          <p className="text-zinc-600 dark:text-zinc-400 mt-1">Analyze and detect bias in your AI model</p>
+          <p className="text-zinc-600 dark:text-zinc-400 mt-1">
+            Analyze and detect bias in your {activeDomainConfig?.label} AI model
+          </p>
         </div>
         <button
           onClick={runScan}
           disabled={isScanning}
           className="flex items-center gap-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white px-8 py-3 rounded-2xl font-medium transition-all active:scale-95"
         >
-          <Play size={20} />
-          {isScanning ? 'Scanning...' : 'Run Full Bias Scan'}
+          {isScanning ? <Loader2 size={20} className="animate-spin" /> : <Play size={20} />}
+          {isScanning ? `Scanning ${activeDomain}...` : 'Run Full Bias Scan'}
         </button>
+      </div>
+
+      {/* Domain Selector */}
+      <div className="flex gap-3">
+        {DOMAINS.map(domain => {
+          const Icon = domain.icon;
+          const isActive = activeDomain === domain.id;
+          return (
+            <button
+              key={domain.id}
+              onClick={() => {
+                setActiveDomain(domain.id);
+                setLiveData(null);
+              }}
+              className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-medium transition-all ${
+                isActive
+                  ? `bg-${domain.color}-600 text-white`
+                  : 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50'
+              }`}
+            >
+              <Icon size={20} />
+              {domain.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Configuration Panel */}
@@ -140,7 +184,7 @@ export function BiasDetection() {
         {/* Metrics Summary Table */}
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
           <h2 className="text-xl font-semibold mb-6 dark:text-white flex items-center gap-2">
-            Metrics Summary
+            Metrics Summary for {activeDomainConfig?.label}
             <span className="text-emerald-600 text-sm font-normal">(Lower is better)</span>
           </h2>
 
@@ -220,10 +264,10 @@ export function BiasDetection() {
         <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-3xl p-8 flex items-start gap-5">
           <AlertTriangle className="text-amber-600 mt-1" size={28} />
           <div>
-            <h3 className="font-semibold text-amber-800 dark:text-amber-400">High Bias Detected</h3>
+            <h3 className="font-semibold text-amber-800 dark:text-amber-400">High Bias Detected in {activeDomainConfig?.label}</h3>
             <p className="text-amber-700 dark:text-amber-300 mt-2">
               Significant bias found in <strong>{highBias.group}</strong> group (Parity Gap: {highBias.parityGap.toFixed(2)}).
-              Consider applying mitigation techniques.
+              Consider applying mitigation techniques in the Mitigation Lab.
             </p>
           </div>
         </div>
@@ -233,7 +277,7 @@ export function BiasDetection() {
           <div>
             <h3 className="font-semibold text-emerald-800 dark:text-emerald-400">No High Bias Detected</h3>
             <p className="text-emerald-700 dark:text-emerald-300 mt-2">
-              All groups are within the acceptable parity threshold (0.20). Run a scan to refresh.
+              All groups in {activeDomainConfig?.label} model are within the acceptable parity threshold (0.20). Run a scan to refresh.
             </p>
           </div>
         </div>

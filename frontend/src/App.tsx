@@ -8,6 +8,9 @@ import { MitigationLab } from './features/mitigation-lab/MitigationLab';
 import { Reports } from './features/reports/Reports';
 import { Datasets } from './features/datasets/Datasets';
 import { Settings } from './features/settings/Settings';
+import { HiringPrediction } from './features/hiring-prediction/HiringPrediction';
+import { SocialRecommendation } from './features/social-recommendation/SocialRecommendation';
+
 type Page = 
   | 'dashboard' 
   | 'datasets' 
@@ -15,7 +18,9 @@ type Page =
   | 'fairness-explorer' 
   | 'mitigation-lab' 
   | 'reports'
-  |'settings';
+  | 'settings'
+  | 'hiring-prediction'
+  | 'social-recommendation';
 
 function App() {
   const [activePage, setActivePage] = useState<Page>('dashboard');
@@ -36,6 +41,10 @@ function App() {
         return <Reports />;
       case 'settings':
         return <Settings />;
+      case 'hiring-prediction':
+        return <HiringPrediction />;
+      case 'social-recommendation':
+        return <SocialRecommendation />;
       default:
         return <Dashboard />;
     }

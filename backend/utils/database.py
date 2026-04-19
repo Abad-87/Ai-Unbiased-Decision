@@ -719,3 +719,7 @@ def _append_to_json(record: dict) -> None:
         json.dump(records, fh, indent=2)
 
     logger.debug(f"Appended record to {JSON_LOG_PATH}")
+
+
+# Alias for compatibility with mitigation_router
+get_prediction_history = get_recent_predictions

@@ -1,8 +1,10 @@
-import { Home, Database, Target, Zap, Shield, FileText, Settings, Menu } from 'lucide-react';
+import { Home, Database, Target, Zap, Shield, FileText, Settings, Menu, Briefcase, Share2 } from 'lucide-react';
 import { useState } from 'react';
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: Home },
+  { id: 'hiring-prediction', label: 'Hiring Prediction', icon: Briefcase },
+  { id: 'social-recommendation', label: 'Social Recommend', icon: Share2 },
   { id: 'datasets', label: 'Datasets & Models', icon: Database },
   { id: 'bias-detection', label: 'Bias Detection', icon: Target },
   { id: 'fairness-explorer', label: 'Fairness Explorer', icon: Zap },
@@ -17,7 +19,9 @@ type Page =
   | 'bias-detection' 
   | 'fairness-explorer' 
   | 'mitigation-lab' 
-  | 'reports';
+  | 'reports'
+  | 'hiring-prediction'
+  | 'social-recommendation';
 
 interface SidebarProps {
   activePage: Page;

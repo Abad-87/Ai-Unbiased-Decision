@@ -39,6 +39,8 @@ from social.router    import router as social_router
 from utils.shap_cache import router as shap_router
 from utils.feedback_router import router as feedback_router
 from utils.insights_router import router as insights_router
+from utils.file_upload_router import router as file_router
+from utils.mitigation_router import router as mitigation_router
 from utils.logger     import setup_logger, log_correlation_event
 from utils.model_registry import registry
 from utils.database   import ensure_indexes
@@ -437,6 +439,8 @@ app.include_router(social_router,   prefix="/social", tags=["Social"])
 app.include_router(shap_router,                       tags=["SHAP"])
 app.include_router(feedback_router,                   tags=["Feedback"])
 app.include_router(insights_router,                   tags=["Insights"])
+app.include_router(file_router,     prefix="/files",  tags=["Files"])
+app.include_router(mitigation_router,                 tags=["Mitigation"])
 
 
 # ─── Platform endpoints ───────────────────────────────────────────────────────

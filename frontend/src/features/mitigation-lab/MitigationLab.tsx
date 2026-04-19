@@ -1,45 +1,56 @@
 import { useState, useEffect } from 'react';
-import { Shield, ArrowRight, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Shield, ArrowRight, CheckCircle, AlertTriangle, Loader2, Eye } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { api } from '../../lib/api';
-import type { SummaryResponse } from '../../lib/api';
+import type { SummaryResponse, MitigationResult } from '../../lib/api';
+
+type Domain = 'loan' | 'hiring' | 'social';
 
 export function MitigationLab() {
   const [selectedTechnique, setSelectedTechnique] = useState<string | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const [mitigated, setMitigated] = useState(false);
   const [liveData, setLiveData] = useState<SummaryResponse | null>(null);
+  const [mitigationResult, setMitigationResult] = useState<MitigationResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [activeDomain, setActiveDomain] = useState<Domain>('loan');
 
   useEffect(() => {
-    api.getSummary('loan').then(setLiveData).catch(() => {});
-  }, []);
+    api.getSummary(activeDomain).then(setLiveData).catch(() => {});
+  }, [activeDomain]);
+
+  const domains: { id: Domain; label: string }[] = [
+    { id: 'loan', label: 'Loan Approval' },
+    { id: 'hiring', label: 'Hiring Decision' },
+    { id: 'social', label: 'Social Recommendation' },
+  ];
 
   const techniques = [
     {
-      id: 'reweighting',
-      name: 'Reweighting',
-      category: 'Pre-processing',
-      description: 'Adjusts sample weights to reduce bias in training data',
-      impact: 'Reduces bias by ~45%',
-      accuracyDrop: '2-4%',
-      color: 'emerald'
-    },
-    {
       id: 'threshold',
-      name: 'Threshold Adjustment',
+      name: 'Threshold Optimization',
       category: 'Post-processing',
-      description: 'Dynamically adjusts decision threshold per group',
+      description: 'Adjusts decision thresholds per group to equalize approval rates',
       impact: 'Reduces bias by ~60%',
       accuracyDrop: '1-3%',
       color: 'blue'
     },
     {
-      id: 'adversarial',
-      name: 'Adversarial Debiasing',
-      category: 'In-processing',
-      description: 'Trains model to be fair while maintaining accuracy',
-      impact: 'Reduces bias by ~70%',
-      accuracyDrop: '3-6%',
+      id: 'calibration',
+      name: 'Calibration Adjustment',
+      category: 'Post-processing',
+      description: 'Fixes miscalibrated confidence scores per group',
+      impact: 'Improves reliability',
+      accuracyDrop: '0-2%',
+      color: 'emerald'
+    },
+    {
+      id: 'impact_removal',
+      name: 'Disparate Impact Removal',
+      category: 'Post-processing',
+      description: 'Ensures 80% rule compliance by boosting disadvantaged groups',
+      impact: 'Legal compliance',
+      accuracyDrop: '2-5%',
       color: 'violet'
     },
   ];
@@ -62,19 +73,42 @@ export function MitigationLab() {
 
   const dpd = liveData?.demographic_parity_difference;
   const biasReduction = dpd != null ? Math.round((1 - Math.abs(dpd)) * 100) : 68;
-  const newFairnessScore = mitigated
-    ? Math.min(99, Math.round(biasReduction + (100 - biasReduction) * 0.45))
-    : biasReduction;
+  
+  // Use real mitigation result if available, otherwise use calculated
+  const newFairnessScore = mitigationResult?.success
+    ? Math.round((1 - Math.abs(mitigationResult.mitigated_dpd || 0)) * 100)
+    : mitigated
+      ? Math.min(99, Math.round(biasReduction + (100 - biasReduction) * 0.45))
+      : biasReduction;
 
-  const applyMitigation = () => {
+  const improvementPct = mitigationResult?.improvement_pct || 0;
+
+  const applyMitigation = async () => {
     if (!selectedTechnique) return;
 
     setIsApplying(true);
+    setError(null);
+    setMitigationResult(null);
 
-    setTimeout(() => {
+    try {
+      const result = await api.applyMitigation({
+        domain: activeDomain,
+        method: selectedTechnique as 'threshold' | 'calibration' | 'impact_removal',
+        target_metric: 'demographic_parity',
+        strength: 0.7,
+      });
+
+      setMitigationResult(result);
+      if (result.success) {
+        setMitigated(true);
+      } else {
+        setError(result.message);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Mitigation failed');
+    } finally {
       setIsApplying(false);
-      setMitigated(true);
-    }, 1800);
+    }
   };
 
   return (
@@ -87,6 +121,27 @@ export function MitigationLab() {
         <p className="text-zinc-600 dark:text-zinc-400 mt-1">
           Apply fairness techniques and compare results before & after
         </p>
+      </div>
+
+      {/* Domain Selector */}
+      <div className="flex gap-2">
+        {domains.map((d) => (
+          <button
+            key={d.id}
+            onClick={() => {
+              setActiveDomain(d.id);
+              setMitigated(false);
+              setMitigationResult(null);
+            }}
+            className={`px-4 py-2 rounded-xl font-medium transition-all ${
+              activeDomain === d.id
+                ? 'bg-emerald-600 text-white'
+                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200'
+            }`}
+          >
+            {d.label}
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -130,7 +185,7 @@ export function MitigationLab() {
               className="mt-8 w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-zinc-400 text-white font-medium rounded-2xl flex items-center justify-center gap-3 transition-all"
             >
               {isApplying ? (
-                <>Applying Mitigation...</>
+                <><Loader2 className="animate-spin" size={20} /> Applying Mitigation...</>
               ) : (
                 <>
                   Apply Selected Technique <ArrowRight size={20} />
@@ -209,13 +264,34 @@ export function MitigationLab() {
               </div>
             </div>
 
-            {mitigated && (
+            {error && (
+              <div className="mt-8 p-6 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-2xl text-center">
+                <AlertTriangle className="mx-auto text-red-600 mb-3" size={32} />
+                <p className="font-medium dark:text-white">Mitigation Failed</p>
+                <p className="text-sm text-red-700 dark:text-red-300 mt-2">{error}</p>
+              </div>
+            )}
+
+            {mitigated && mitigationResult?.success && (
               <div className="mt-8 p-6 bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-center">
                 <CheckCircle className="mx-auto text-emerald-600 mb-3" size={32} />
                 <p className="font-medium dark:text-white">Mitigation successfully applied!</p>
                 <p className="text-sm text-emerald-700 dark:text-emerald-300 mt-2">
-                  The model is now significantly fairer across all protected groups.
+                  Improved fairness by {improvementPct.toFixed(1)}%. Affected {mitigationResult.affected_records} of {mitigationResult.total_records} predictions.
                 </p>
+                {mitigationResult.new_thresholds.length > 0 && (
+                  <div className="mt-4 text-left">
+                    <p className="text-sm font-medium dark:text-white mb-2">New Thresholds:</p>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {mitigationResult.new_thresholds.map((t) => (
+                        <div key={t.group} className="bg-white dark:bg-zinc-800 p-2 rounded">
+                          <span className="text-zinc-500">{t.group}:</span>{' '}
+                          <span className="font-medium">{t.new_threshold.toFixed(3)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
