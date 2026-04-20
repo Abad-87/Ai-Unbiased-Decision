@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Zap, RefreshCw, AlertTriangle, CheckCircle, Eye, Loader2, Briefcase, DollarSign, Share2 } from 'lucide-react';
+import { Zap, RefreshCw, AlertTriangle, Loader2, Briefcase, DollarSign, Share2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { api } from '../../lib/api';
 import type { HiringResponse, LoanResponse, SocialResponse } from '../../lib/api';

@@ -9,7 +9,7 @@ interface FeedbackFormProps {
   onFeedbackSubmitted?: () => void;
 }
 
-export function FeedbackForm({ correlationId, predictionLabel, domain, onFeedbackSubmitted }: FeedbackFormProps) {
+export function FeedbackForm({ correlationId, predictionLabel: _predictionLabel, domain, onFeedbackSubmitted }: FeedbackFormProps) {
   const [groundTruth, setGroundTruth] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);

@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
-  Upload, Database, Trash2, CheckCircle, AlertCircle, X, FileText, 
+  Upload, Database, Trash2, AlertCircle, X, FileText, 
   Image as ImageIcon, FileSpreadsheet, FileArchive, FileCode, File as FileIcon,
-  Loader2, Search, Download, Eye, Grid, List as ListIcon, Filter,
-  RefreshCw, HardDrive, FileType2, Plus
+  Loader2, Search, Download, Grid, List as ListIcon,
+  RefreshCw, HardDrive, Plus
 } from 'lucide-react';
 import { api } from '../../lib/api';
-import type { FileMetadata, FileStats, FileListResponse } from '../../lib/api';
+import type { FileMetadata, FileStats } from '../../lib/api';
 
 type ViewMode = 'grid' | 'list';
 type FileCategory = 'all' | 'image' | 'document' | 'data' | 'archive' | 'other';

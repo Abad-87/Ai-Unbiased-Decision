@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, ArrowRight, CheckCircle, AlertTriangle, Loader2, Eye } from 'lucide-react';
+import { Shield, ArrowRight, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { api } from '../../lib/api';
 import type { SummaryResponse, MitigationResult } from '../../lib/api';

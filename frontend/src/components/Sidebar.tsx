@@ -20,6 +20,7 @@ type Page =
   | 'fairness-explorer' 
   | 'mitigation-lab' 
   | 'reports'
+  | 'settings'
   | 'hiring-prediction'
   | 'social-recommendation';
 

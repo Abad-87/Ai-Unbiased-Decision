@@ -82,7 +82,7 @@ export function Reports() {
     const next: Partial<Record<Domain, PredictionRecord[]>> = {};
     results.forEach((r, i) => {
       if (r.status === 'fulfilled' && r.value) {
-        next[DOMAINS[i]] = r.value;
+        next[DOMAINS[i]] = r.value.records as PredictionRecord[];
       }
     });
     setRecentPredictions(next);

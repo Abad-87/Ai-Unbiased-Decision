@@ -91,7 +91,7 @@ export function Dashboard() {
   ];
 
   const activeDomainConfig = DOMAINS.find(d => d.id === activeDomain);
-  const activeIcon = activeDomainConfig?.icon || DollarSign;
+  const ActiveIcon = activeDomainConfig?.icon || DollarSign;
   const activeColor = activeDomainConfig?.color || 'emerald';
 
   return (
@@ -123,7 +123,7 @@ export function Dashboard() {
         <div className="flex flex-col lg:flex-row justify-between items-start gap-8">
           <div>
             <div className="flex items-center gap-4 mb-3">
-              <activeIcon className={`text-${activeColor}-600`} size={40} />
+              <ActiveIcon className={`text-${activeColor}-600`} size={40} />
               <h1 className="text-4xl font-semibold tracking-tight dark:text-white">
                 {activeDomainConfig?.label} Model
               </h1>
