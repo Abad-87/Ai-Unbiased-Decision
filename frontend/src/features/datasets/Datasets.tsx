@@ -592,6 +592,14 @@ export function Datasets() {
       )}
 
       {/* Tips */}
+      <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-3xl p-6">
+        <p className="text-sm text-blue-800 dark:text-blue-300">
+          Uploaded files are stored for management and review. They do not automatically retrain models or change
+          prediction outputs. To generate live model results, use the prediction forms in Fairness Explorer or domain
+          prediction pages.
+        </p>
+      </div>
+
       <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-3xl p-8">
         <div className="flex items-start gap-5">
           <AlertCircle className="text-amber-600 mt-1" size={28} />

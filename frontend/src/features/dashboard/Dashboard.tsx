@@ -26,9 +26,13 @@ function useDomainSummary(domain: Domain) {
   
   useEffect(() => {
     setLoading(true);
+    setError(false);
     api.getSummary(domain)
       .then(setData)
-      .catch(() => setError(true))
+      .catch(() => {
+        setData(null);
+        setError(true);
+      })
       .finally(() => setLoading(false));
   }, [domain]);
   
@@ -42,16 +46,16 @@ export function Dashboard() {
   const dpd   = data?.demographic_parity_difference ?? null;
   const eod   = data?.equal_opportunity_difference  ?? null;
 
-  // Derive a simple 0-100 fairness score from DPD (lower gap = higher score).
-  const fairnessScore = dpd != null ? Math.max(0, Math.round((1 - Math.abs(dpd)) * 100)) : (error ? 0 : 78);
-  const biasedPct     = 100 - fairnessScore;
+  const hasRecords = (data?.n_records ?? 0) > 0;
+  const fairnessScore = dpd != null ? Math.max(0, Math.round((1 - Math.abs(dpd)) * 100)) : null;
+  const biasedPct     = fairnessScore != null ? 100 - fairnessScore : null;
 
   const metrics = [
     {
       label:  "Overall Fairness Score",
-      value:  loading ? "…" : String(fairnessScore),
+      value:  loading ? "…" : (fairnessScore != null ? String(fairnessScore) : (error ? "—" : "N/A")),
       unit:   "/100",
-      status: (fairnessScore < 80 ? "warning" : "fair") as "warning" | "fair",
+      status: (fairnessScore != null && fairnessScore < 80 ? "warning" : "fair") as "warning" | "fair",
     },
     {
       label:  "Demographic Parity Gap",
@@ -67,7 +71,7 @@ export function Dashboard() {
     },
     {
       label:  "Records Analysed",
-      value:  loading ? "…" : (data ? String(data.n_records) : (error ? "—" : "0")),
+      value:  loading ? "…" : (data ? String(data.n_records) : (error ? "—" : "N/A")),
       unit:   "",
       status: "fair" as "warning" | "fair",
     },
@@ -78,17 +82,16 @@ export function Dashboard() {
         group:    g.group,
         approval: Math.round(g.positive_rate * 100),
       }))
-    : [
-        { group: "Group A", approval: 82 },
-        { group: "Group B", approval: 61 },
-        { group: "Group C", approval: 75 },
-        { group: "Group D", approval: 48 },
-      ];
+    : [];
 
-  const pieData = [
-    { name: "Fair",         value: fairnessScore, color: "#10b981" },
-    { name: "Biased Areas", value: biasedPct,     color: "#ef4444" },
-  ];
+  const pieData = fairnessScore != null && biasedPct != null
+    ? [
+        { name: "Fair",         value: fairnessScore, color: "#10b981" },
+        { name: "Biased Areas", value: biasedPct,     color: "#ef4444" },
+      ]
+    : [
+        { name: "No Data", value: 100, color: "#e4e4e7" },
+      ];
 
   const activeDomainConfig = DOMAINS.find(d => d.id === activeDomain);
   const ActiveIcon = activeDomainConfig?.icon || DollarSign;
@@ -131,7 +134,7 @@ export function Dashboard() {
             </div>
             <p className="text-zinc-600 dark:text-zinc-400 text-lg">Overall Fairness Score</p>
             <p className={`text-6xl font-bold text-${activeColor}-600 mt-2`}>
-              {loading ? "…" : fairnessScore}
+              {loading ? "…" : (fairnessScore ?? "N/A")}
               <span className="text-3xl text-zinc-400 dark:text-zinc-500">/100</span>
             </p>
             <div className="mt-4 flex items-center gap-3 text-amber-600 dark:text-amber-400">
@@ -141,7 +144,7 @@ export function Dashboard() {
                   data ? (dpd != null && Math.abs(dpd) > 0.15
                       ? `Bias detected — DPD ${Math.abs(dpd).toFixed(2)}`
                       : "Fairness metrics within acceptable range")
-                  : error ? "Failed to load fairness data" : "No data available yet"}
+                  : error ? "Failed to load fairness data" : "No prediction data yet. Run a few predictions first."}
               </span>
             </div>
           </div>
@@ -196,14 +199,20 @@ export function Dashboard() {
           </p>
         </div>
 
-        <ResponsiveContainer width="100%" height={380}>
-          <BarChart data={groupData} barCategoryGap={40}>
-            <XAxis dataKey="group" tick={{ fill: '#a1a1aa' }} />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="approval" radius={12} fill="#10b981" />
-          </BarChart>
-        </ResponsiveContainer>
+        {hasRecords && groupData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={380}>
+            <BarChart data={groupData} barCategoryGap={40}>
+              <XAxis dataKey="group" tick={{ fill: '#a1a1aa' }} />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="approval" radius={12} fill="#10b981" />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-[380px] flex items-center justify-center text-zinc-500 dark:text-zinc-400">
+            No grouped fairness data yet.
+          </div>
+        )}
       </div>
 
       {/* Quick Actions */}
