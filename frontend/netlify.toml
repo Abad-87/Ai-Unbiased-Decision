@@ -8,9 +8,8 @@
 #   4. Push to main → auto-deploys
 
 [build]
-  base    = "frontend"
   command = "npm install && npm run build"
-  publish = "frontend/dist"
+  publish = "dist"
 
 # SPA routing — redirect all paths to index.html so React Router handles them
 [[redirects]]
