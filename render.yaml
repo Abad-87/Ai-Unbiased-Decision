@@ -36,7 +36,7 @@ services:
     region: oregon
     plan: free
     buildCommand: npm install && npm run build
-    publishPath: dist
+    publishDir: dist
     # Rewrite all requests to index.html for React Router support
     routes:
       - type: rewrite
