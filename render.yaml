@@ -29,7 +29,7 @@ services:
         sync: false
 
   # 2. Frontend Service (React/Vite)
-  - type: static_site # <--- CHANGED FROM 'web' TO 'static_site'
+  - type: static # <--- CHANGED FROM 'web' TO 'static_site'
     name: quantum-ai-frontend
     env: static
     rootDir: frontend
