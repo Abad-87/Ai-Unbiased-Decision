@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type DragEvent, type ChangeEvent } from 'react';
 import { 
   Upload, Database, Trash2, AlertCircle, X, FileText, 
   Image as ImageIcon, FileSpreadsheet, FileArchive, FileCode, File as FileIcon,
@@ -82,7 +82,7 @@ export function Datasets() {
     fetchFiles();
   }, [fetchFiles]);
 
-  const handleDrag = (e: React.DragEvent) => {
+  const handleDrag = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (e.type === 'dragenter' || e.type === 'dragover') {
@@ -92,7 +92,7 @@ export function Datasets() {
     }
   };
 
-  const handleDrop = async (e: React.DragEvent) => {
+  const handleDrop = async (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
@@ -101,7 +101,7 @@ export function Datasets() {
     await uploadMultipleFiles(droppedFiles);
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const selectedFiles = Array.from(e.target.files);
       await uploadMultipleFiles(selectedFiles);

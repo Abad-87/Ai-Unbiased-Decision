@@ -58,7 +58,7 @@ function App() {
       />
       
       <div className="flex-1 flex flex-col overflow-hidden">
-        <TopNavbar />
+        <TopNavbar onNewScan={() => setActivePage('fairness-explorer')} />
         <main className="flex-1 overflow-auto p-6 bg-zinc-50 dark:bg-zinc-950">
           {renderPage()}
         </main>

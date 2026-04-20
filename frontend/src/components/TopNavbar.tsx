@@ -1,6 +1,10 @@
 import { Bell, Search } from 'lucide-react';
 
-export function TopNavbar() {
+interface TopNavbarProps {
+  onNewScan: () => void;
+}
+
+export function TopNavbar({ onNewScan }: TopNavbarProps) {
   return (
     <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 h-16 flex items-center px-6 justify-between shadow-sm">
       <div className="flex-1 max-w-md">
@@ -22,7 +26,10 @@ export function TopNavbar() {
         </button>
 
         {/* New Scan Button */}
-        <button className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-2xl transition-colors">
+        <button
+          onClick={onNewScan}
+          className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-2xl transition-colors"
+        >
           New Scan
         </button>
       </div>
