@@ -4,11 +4,11 @@ import { api } from '../../lib/api';
 import type { SummaryResponse } from '../../lib/api';
 
 interface PredictionRecord {
-  correlation_id: string;
-  input: Record<string, unknown>;
+  correlation_id: string | null;
+  input?: Record<string, unknown>;
   prediction: number;
   confidence: number;
-  timestamp?: string;
+  timestamp?: string | null;
 }
 
 type Domain = 'hiring' | 'loan' | 'social';
@@ -82,7 +82,7 @@ export function Reports() {
     const next: Partial<Record<Domain, PredictionRecord[]>> = {};
     results.forEach((r, i) => {
       if (r.status === 'fulfilled' && r.value) {
-        next[DOMAINS[i]] = r.value.records as PredictionRecord[];
+        next[DOMAINS[i]] = r.value.records as unknown as PredictionRecord[];
       }
     });
     setRecentPredictions(next);
