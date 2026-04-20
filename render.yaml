@@ -29,16 +29,15 @@ services:
         sync: false
 
   # 2. Frontend Service (React/Vite)
-  - type: static # <--- CHANGED FROM 'web' TO 'static_site'
-    name: quantum-ai-frontend
-    env: static
-    rootDir: frontend
-    region: oregon
-    plan: free
-    buildCommand: npm install && npm run build
-    publishPath: dist # <--- This will now be accepted
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-  
+ # 2. Frontend Service (React/Vite)
+- type: static_site
+  name: quantum-ai-frontend
+  rootDir: frontend
+  region: oregon
+  plan: free
+  buildCommand: npm install && npm run build
+  publishPath: dist
+  routes:
+    - type: rewrite
+      source: /*
+      destination: /index.html
