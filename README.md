@@ -1,5 +1,9 @@
 <div align="center">
 
+<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=10b981&height=220&section=header&text=Unbiased%20AI&fontSize=52&fontColor=ffffff&fontAlignY=38&desc=Detect%20%C2%B7%20Explain%20%C2%B7%20Mitigate%20%C2%B7%20Deploy%20with%20Confidence&descAlignY=58&descSize=17"/>
+
+<br/>
+
 ```
 ██╗   ██╗███╗   ██╗██████╗ ██╗ █████╗ ███████╗███████╗██████╗      █████╗ ██╗
 ██║   ██║████╗  ██║██╔══██╗██║██╔══██╗██╔════╝██╔════╝██╔══██╗    ██╔══██╗██║
@@ -8,23 +12,32 @@
 ╚██████╔╝██║ ╚████║██████╔╝██║██║  ██║███████║███████╗██████╔╝    ██║  ██║██║
  ╚═════╝ ╚═╝  ╚═══╝╚═════╝ ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚═════╝     ╚═╝  ╚═╝╚═╝
 ```
-<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=0d8c15&height=200&section=header&text=Customer%20Churn%20Analysis&fontSize=40&fontColor=ffffff&fontAlignY=38&desc=End-to-end%20Business%20Intelligence%20Dashboard&descAlignY=58&descSize=16"/>
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&duration=3000&pause=1000&color=10B981&center=true&vCenter=true&multiline=true&width=700&height=80&lines=Detect.+Analyze.+Mitigate.;Building+Fairer+AI+%E2%80%94+One+Model+at+a+Time." alt="Typing SVG" />
-
-<br/>
-
-[![Live Demo](https://img.shields.io/badge/⚡_LIVE_DEMO-Netlify-00C7B7?style=for-the-badge&logo=netlify&logoColor=white)](https://your-demo.netlify.app)
-[![Backend](https://img.shields.io/badge/🚀_API-Render-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://your-backend.onrender.com)
-[![License](https://img.shields.io/badge/📄_License-MIT-emerald?style=for-the-badge)](#)
-[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=18&duration=2000&pause=1200&color=10B981&center=true&vCenter=true&width=720&lines=Detect+bias.+Explain+decisions.+Enforce+fairness.+Deploy+with+confidence." alt="Tagline" />
 
 <br/>
 
-> **AI shouldn't discriminate.**  
-> Unbiased AI gives you the tools to detect, visualize, and eliminate bias in automated decisions — across hiring, lending, and content recommendation.
+![Python](https://img.shields.io/badge/Python-3.11-10b981?style=for-the-badge&logo=python&logoColor=white)
+![React](https://img.shields.io/badge/React-19-10b981?style=for-the-badge&logo=react&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.111-10b981?style=for-the-badge&logo=fastapi&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-6.0-10b981?style=for-the-badge&logo=typescript&logoColor=white)
+![Tailwind](https://img.shields.io/badge/Tailwind-v4-10b981?style=for-the-badge&logo=tailwindcss&logoColor=white)
+
+<br/>
+
+[![Live Demo](https://img.shields.io/badge/⚡_Live_Demo-Visit_Now-059669?style=for-the-badge)](https://your-demo.netlify.app)
+&nbsp;
+[![API Docs](https://img.shields.io/badge/📡_API_Docs-Swagger_UI-047857?style=for-the-badge)](https://your-backend.onrender.com/docs)
+&nbsp;
+[![License](https://img.shields.io/badge/License-MIT-065f46?style=for-the-badge)](LICENSE)
+
+<br/><br/>
+
+> **Hiring tools that favor one gender. Loan models that redline zip codes.**
+> **Recommendation engines that filter entire demographics.**
+>
+> Bias in AI is real — and most teams never see it until it's too late.
+> **Unbiased AI makes invisible bias visible, measurable, and fixable.**
 
 <br/>
 
@@ -32,73 +45,44 @@
 
 </div>
 
-## ✦ What Is This?
+<br/>
 
-**Unbiased AI** is a full-stack fairness monitoring platform that plugs into your ML models and answers one critical question:
+## ✦ What We Built
 
-> *"Is my AI treating everyone equally?"*
-
-It combines a **FastAPI backend** with trained scikit-learn models, a **React + TypeScript frontend**, and a suite of bias detection and mitigation algorithms — all wrapped in a clean, dark-mode-ready dashboard.
+A production-grade fairness monitoring platform with three trained ML models, a real-time bias analytics engine, interactive what-if tooling, and an automated mitigation pipeline — all in a single deployable full-stack app.
 
 <br/>
 
----
-
-## ✦ Feature Showcase
-
 <table>
 <tr>
-<td width="50%">
+<td width="50%" valign="top">
 
-### 🎯 Bias Detection Engine
-```
-Protected Groups:  Gender · Age · Ethnicity
-Fairness Metrics:  DPD · EOD · Disparate Impact
-Threshold Config:  Fully adjustable per domain
-Live Scanning:     Real-time model evaluation
-```
+### 🎯 &nbsp;Bias Detection Engine
 
-Runs across **3 domains simultaneously** — Loan Approval, Hiring Decisions, and Social Recommendations.
+Real-time fairness scan across three live AI domains. Calculates Demographic Parity Difference, Equal Opportunity Difference, and Disparate Impact Ratio per protected group. Configurable thresholds. One-click full scan. Parity gap table with red/green indicators and domain switching.
 
 </td>
-<td width="50%">
+<td width="50%" valign="top">
 
-### ⚡ What-If Fairness Explorer
-```
-Interactive sliders for every model feature
-SHAP feature importance visualization
-Instant bias risk scoring (0–100)
-Per-prediction correlation tracking
-```
+### ⚡ &nbsp;What-If Fairness Explorer
 
-Test hypothetical candidates, applicants, or users and see *exactly* how the model would judge them.
+Adjust any model feature with live sliders — credit score, education level, session time — and get instant predictions with SHAP feature importance charts. Every prediction logs a correlation ID for full auditability and ground-truth annotation.
 
 </td>
 </tr>
 <tr>
-<td width="50%">
+<td width="50%" valign="top">
 
-### 🛡️ Mitigation Lab
-```
-Threshold Optimization   → -60% bias
-Calibration Adjustment   → Fix confidence drift
-Disparate Impact Removal → 80% rule compliance
-```
+### 🛡️ &nbsp;Mitigation Lab
 
-Side-by-side **Before / After** bar charts. Apply mitigations and watch the parity gaps close in real time.
+Three post-processing algorithms: threshold optimization, calibration adjustment, and disparate impact removal. Side-by-side before/after bar charts. Live fairness score delta and affected record count. Real API — no mock data.
 
 </td>
-<td width="50%">
+<td width="50%" valign="top">
 
-### 📊 Live Audit Reports
-```
-Fairness Score  /100 per domain
-Demographic Parity Difference
-Equal Opportunity Difference
-Recent Predictions Log + Export
-```
+### 📊 &nbsp;Live Audit Reports
 
-One-click **JSON export** for regulatory submissions. Full ground-truth feedback loop via the `/feedback` API.
+Fairness snapshots across all three domains. Full prediction history with confidence scores, bias risk bands, and ground-truth annotation loop. One-click JSON export for regulatory submissions. Built for auditors.
 
 </td>
 </tr>
@@ -108,40 +92,68 @@ One-click **JSON export** for regulatory submissions. Full ground-truth feedback
 
 ---
 
+<br/>
+
 ## ✦ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        FRONTEND                             │
-│  React 19  ·  TypeScript 6  ·  Tailwind v4  ·  Recharts    │
-│                                                             │
-│  Dashboard  →  Bias Detection  →  Fairness Explorer         │
-│  Mitigation Lab  →  Reports  →  File Manager               │
-└────────────────────────┬────────────────────────────────────┘
-                         │  REST API  (VITE_API_BASE_URL)
-┌────────────────────────▼────────────────────────────────────┐
-│                        BACKEND                              │
-│  FastAPI  ·  Python 3.11  ·  scikit-learn  ·  joblib       │
-│                                                             │
-│  /hiring/predict     →  RandomForest (6 features)           │
-│  /loan/predict       →  RandomForest (7 features)           │
-│  /social/recommend   →  RandomForest (7 features)           │
-│  /insights/:domain   →  DPD · EOD · Per-group rates         │
-│  /mitigation/apply   →  Threshold · Calibration · DI-Remove │
-│  /files/*            →  Upload · Preview · Download         │
-│  /feedback           →  Ground-truth annotation loop        │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────┐
-│                       STORAGE                               │
-│  MongoDB Atlas (predictions + feedback)                     │
-│  ↳ Fallback: predictions.json (no-config local dev)         │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                         BROWSER                              │
+│   React 19  ·  TypeScript 6  ·  Tailwind v4  ·  Recharts    │
+│                                                              │
+│   Dashboard · Bias Detection · Fairness Explorer             │
+│   Mitigation Lab · Audit Reports · File Manager              │
+└─────────────────────────┬────────────────────────────────────┘
+                          │  REST / JSON
+                          │  (VITE_API_BASE_URL)
+┌─────────────────────────▼────────────────────────────────────┐
+│                      FASTAPI BACKEND                         │
+│                      Python 3.11                             │
+│                                                              │
+│   POST  /hiring/predict        POST  /loan/predict           │
+│   POST  /social/recommend      POST  /mitigation/apply       │
+│   GET   /insights/:domain      POST  /feedback               │
+│   GET/POST  /files/*           GET   /shap/:id               │
+└──────────────────────┬───────────────────────────────────────┘
+                       │
+          ┌────────────┴─────────────┐
+          │                          │
+┌─────────▼──────────┐    ┌──────────▼──────────┐
+│   MongoDB Atlas    │ OR │   JSON Fallback      │
+│  (predictions +    │    │  (zero-config dev)   │
+│   feedback store)  │    └─────────────────────┘
+└─────────┬──────────┘
+          │
+┌─────────▼──────────┐
+│  scikit-learn      │
+│  hiring_model.pkl  │
+│  loan_model.pkl    │
+│  social_model.pkl  │
+└────────────────────┘
 ```
 
 <br/>
 
 ---
+
+<br/>
+
+## ✦ Fairness Metrics
+
+| Metric | What it measures | Threshold |
+|--------|-----------------|-----------|
+| **Demographic Parity Difference** | Gap in positive-decision rates between groups | `< 0.10` ideal |
+| **Equal Opportunity Difference** | Gap in true-positive rates for qualified individuals | `< 0.10` ideal |
+| **Disparate Impact Ratio** | Minority positive rate ÷ majority positive rate | `≥ 0.80` (legal rule) |
+| **Bias Risk Score** | Composite 0–100 internal risk band | `< 40` = low risk |
+
+When violations are detected the system flags predictions for human review, logs the event, and surfaces a mitigation recommendation automatically.
+
+<br/>
+
+---
+
+<br/>
 
 ## ✦ Quick Start
 
@@ -153,88 +165,82 @@ One-click **JSON export** for regulatory submissions. Full ground-truth feedback
 | Node.js | ≥ 20 |
 | npm | ≥ 10 |
 
-### 1 · Clone & Bootstrap
+<br/>
+
+**1 — Clone and bootstrap**
 
 ```bash
 git clone https://github.com/your-username/unbiased-ai.git
 cd unbiased-ai
 
-# Generate placeholder ML models (required before first run)
+# Build placeholder ML models (required before first run)
 python create_dummy_models.py
 ```
 
-### 2 · Backend
+**2 — Start the backend**
 
 ```bash
 cd backend
-
-# Install dependencies
 pip install -r requirements.txt
 
-# Configure environment
+# MONGO_URL is optional — leave blank to use local JSON fallback
 cp ../.env.example .env
-# Edit .env — MONGO_URL is optional; leave blank for JSON fallback
 
-# Start the API server
 uvicorn main:app --reload --port 8000
+# Swagger UI → http://localhost:8000/docs
 ```
 
-> API docs available at **http://localhost:8000/docs**
-
-### 3 · Frontend
+**3 — Start the frontend**
 
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Configure API endpoint
-cp .env.example .env.local
-# VITE_API_BASE_URL=http://localhost:8000
-
-# Start dev server
+echo "VITE_API_BASE_URL=http://localhost:8000" > .env.local
 npm run dev
+# App → http://localhost:5173
 ```
-
-> App available at **http://localhost:5173**
 
 <br/>
 
 ---
 
-## ✦ Environment Variables
+<br/>
 
-### Backend (`.env`)
+## ✦ Configuration
+
+### Backend &nbsp;`.env`
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MONGO_URL` | *(empty)* | MongoDB Atlas connection string. Leave blank to use JSON fallback. |
+| `MONGO_URL` | *(blank)* | MongoDB Atlas URI — leave empty for JSON fallback |
 | `ENVIRONMENT` | `development` | `development` or `production` |
-| `LOG_LEVEL` | `INFO` | `DEBUG` · `INFO` · `WARNING` · `ERROR` |
-| `FRONTEND_ORIGINS` | `http://localhost:5173` | Comma-separated allowed CORS origins |
-| `HIRING_POSITIVE_THRESHOLD` | `0.55` | Approve if confidence ≥ this value |
-| `HIRING_NEGATIVE_THRESHOLD` | `0.45` | Reject if confidence ≤ this value |
+| `FRONTEND_ORIGINS` | `http://localhost:5173` | CORS allowed origins |
+| `HIRING_POSITIVE_THRESHOLD` | `0.55` | Approve if confidence ≥ this |
+| `HIRING_NEGATIVE_THRESHOLD` | `0.45` | Reject if confidence ≤ this |
 | `LOAN_POSITIVE_THRESHOLD` | `0.55` | Same logic for loan domain |
 | `LOAN_NEGATIVE_THRESHOLD` | `0.45` | Same logic for loan domain |
 
-### Frontend (`.env.local`)
+### Frontend &nbsp;`.env.local`
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VITE_API_BASE_URL` | `http://localhost:8000` | Backend API base URL |
+| `VITE_API_BASE_URL` | `http://localhost:8000` | Backend base URL |
 
 <br/>
 
 ---
+
+<br/>
 
 ## ✦ API Reference
 
 <details>
-<summary><strong>🏢 Hiring · /hiring/predict</strong></summary>
+<summary><strong>POST &nbsp;/hiring/predict</strong></summary>
+
+<br/>
 
 ```json
-POST /hiring/predict
+// Request
 {
   "years_experience": 5,
   "education_level": 2,
@@ -245,25 +251,32 @@ POST /hiring/predict
   "gender": "female",
   "ethnicity": "asian"
 }
-```
 
-```json
+// Response
 {
   "prediction": 1,
   "prediction_label": "Hired",
   "confidence": 0.847,
-  "bias_risk": { "score": 0.12, "band": "low", "flag_for_review": false },
-  "correlation_id": "hire_abc123",
-  "shap_poll_url": "/shap/hire_abc123"
+  "bias_risk": {
+    "score": 0.12,
+    "band": "low",
+    "flag_for_review": false,
+    "recommendation": "Decision within acceptable fairness bounds."
+  },
+  "correlation_id": "hire_a1b2c3",
+  "shap_poll_url": "/shap/hire_a1b2c3"
 }
 ```
+
 </details>
 
 <details>
-<summary><strong>💰 Loan · /loan/predict</strong></summary>
+<summary><strong>POST &nbsp;/loan/predict</strong></summary>
+
+<br/>
 
 ```json
-POST /loan/predict
+// Request
 {
   "credit_score": 720,
   "annual_income": 75000,
@@ -273,51 +286,56 @@ POST /loan/predict
   "gender": "male",
   "age_group": "26-40"
 }
-```
 
-```json
+// Response
 {
   "prediction": 1,
   "prediction_label": "Approved",
   "confidence": 0.913,
   "bias_risk": { "score": 0.08, "band": "low", "flag_for_review": false },
-  "correlation_id": "loan_xyz789"
+  "correlation_id": "loan_x9y8z7"
 }
 ```
+
 </details>
 
 <details>
-<summary><strong>📈 Fairness Summary · /insights/:domain/summary</strong></summary>
+<summary><strong>GET &nbsp;/insights/:domain/summary</strong></summary>
+
+<br/>
 
 ```json
-GET /insights/hiring/summary
-
 {
   "domain": "hiring",
   "n_records": 342,
+  "labelled_count": 89,
+  "sensitive_attributes_detected": ["gender", "ethnicity"],
   "demographic_parity_difference": 0.14,
   "equal_opportunity_difference": 0.09,
   "per_group": [
-    { "group": "male",   "positive_rate": 0.76, "n": 180 },
-    { "group": "female", "positive_rate": 0.62, "n": 162 }
+    { "group": "male",   "n": 180, "positive_rate": 0.76, "avg_confidence": 0.81 },
+    { "group": "female", "n": 162, "positive_rate": 0.62, "avg_confidence": 0.77 }
   ]
 }
 ```
+
 </details>
 
 <details>
-<summary><strong>🛡️ Mitigation · /mitigation/apply</strong></summary>
+<summary><strong>POST &nbsp;/mitigation/apply</strong></summary>
+
+<br/>
 
 ```json
-POST /mitigation/apply
+// Request
 {
   "domain": "hiring",
   "method": "threshold",
-  "strength": 0.7
+  "strength": 0.7,
+  "target_metric": "demographic_parity"
 }
-```
 
-```json
+// Response
 {
   "success": true,
   "original_dpd": 0.14,
@@ -325,148 +343,180 @@ POST /mitigation/apply
   "improvement_pct": 64.3,
   "affected_records": 28,
   "new_thresholds": [
-    { "group": "female", "original_threshold": 0.5, "new_threshold": 0.42 }
+    { "group": "female", "original_threshold": 0.50, "new_threshold": 0.42 }
   ]
 }
 ```
+
+</details>
+
+<details>
+<summary><strong>POST &nbsp;/feedback — ground-truth annotation</strong></summary>
+
+<br/>
+
+```json
+// Request
+{ "correlation_id": "hire_a1b2c3", "ground_truth": 1 }
+
+// Response
+{ "correlation_id": "hire_a1b2c3", "updated": true, "message": "Ground truth recorded." }
+```
+
+Annotates a past prediction with its real-world outcome, enabling Equalized Odds and Calibration metric calculations.
+
 </details>
 
 <br/>
 
 ---
 
-## ✦ Fairness Metrics Explained
-
-| Metric | Formula | Threshold | Meaning |
-|--------|---------|-----------|---------|
-| **Demographic Parity Difference** | P(Ŷ=1\|A=a) − P(Ŷ=1\|A=b) | < 0.10 ideal | Equal positive rates across groups |
-| **Equal Opportunity Difference** | TPR_a − TPR_b | < 0.10 ideal | Equal true-positive rates for qualified candidates |
-| **Disparate Impact Ratio** | P(Ŷ=1\|minority) / P(Ŷ=1\|majority) | ≥ 0.80 (80% rule) | Legal compliance threshold |
-| **Bias Risk Score** | Composite 0–100 | < 40 = low risk | Internal risk band for flagging |
-
 <br/>
-
----
 
 ## ✦ Project Structure
 
 ```
 unbiased-ai/
 │
-├── 🐍 backend/
-│   ├── main.py                    # FastAPI app + router wiring
-│   ├── models/                    # Trained .pkl model files
-│   ├── hiring/                    # Hiring domain (router + model loader)
-│   ├── loan/                      # Loan domain
-│   ├── social/                    # Social recommendation domain
-│   ├── fairness/                  # DPD, EOD, disparate impact logic
+├── backend/
+│   ├── main.py                      ← FastAPI app + router wiring
+│   ├── models/                      ← Trained .pkl model files
+│   ├── hiring/router.py             ← POST /hiring/predict
+│   ├── loan/router.py               ← POST /loan/predict
+│   ├── social/router.py             ← POST /social/recommend
+│   ├── fairness/checker.py          ← DPD, EOD, disparate impact
 │   └── utils/
-│       ├── database.py            # MongoDB + JSON fallback
-│       ├── insights_router.py     # /insights/* endpoints
-│       ├── mitigation_router.py   # /mitigation/* endpoints
-│       ├── feedback_router.py     # /feedback endpoint
-│       └── file_upload_router.py  # /files/* endpoints
+│       ├── database.py              ← MongoDB + JSON fallback
+│       ├── insights_router.py       ← GET  /insights/*
+│       ├── mitigation_router.py     ← POST /mitigation/*
+│       ├── feedback_router.py       ← POST /feedback
+│       └── file_upload_router.py    ← GET/POST /files/*
 │
-├── ⚛️  frontend/
-│   └── src/
-│       ├── features/
-│       │   ├── dashboard/         # Live fairness overview
-│       │   ├── bias-detection/    # Scan & metrics table
-│       │   ├── fairness-explorer/ # What-If analysis
-│       │   ├── mitigation-lab/    # Before/After comparison
-│       │   ├── reports/           # Audit log + export
-│       │   ├── datasets/          # File manager
-│       │   ├── hiring-prediction/ # Domain-specific UI
-│       │   └── social-recommendation/
-│       ├── components/            # Sidebar, TopNavbar, FeedbackForm
-│       └── lib/api.ts             # Typed API client
+├── frontend/src/
+│   ├── features/
+│   │   ├── dashboard/               ← Live fairness overview
+│   │   ├── bias-detection/          ← Scan & metrics table
+│   │   ├── fairness-explorer/       ← What-If analysis + SHAP
+│   │   ├── mitigation-lab/          ← Before/After comparison
+│   │   ├── reports/                 ← Audit log + JSON export
+│   │   ├── datasets/                ← File manager
+│   │   ├── hiring-prediction/       ← Hiring domain UI
+│   │   └── social-recommendation/  ← Social domain UI
+│   ├── components/
+│   │   ├── Sidebar.tsx
+│   │   ├── TopNavbar.tsx
+│   │   └── FeedbackForm.tsx
+│   └── lib/api.ts                   ← Fully-typed REST client
 │
-├── 📊 data/
+├── data/
 │   ├── hiring_test_data.csv
 │   ├── loan_test_data.csv
 │   └── social_test_data.csv
 │
-├── create_dummy_models.py         # Bootstrap ML models for testing
-├── render.yaml                    # One-click Render deployment
-└── netlify.toml                   # One-click Netlify deployment
+├── create_dummy_models.py           ← Bootstrap ML models for dev
+├── test_system.py                   ← Full system verification suite
+├── render.yaml                      ← One-click Render deploy config
+└── netlify.toml                     ← One-click Netlify deploy config
 ```
 
 <br/>
 
 ---
 
-## ✦ Deploy in 5 Minutes
-
-### Backend → Render
-
-1. Push repo to GitHub
-2. [New Web Service](https://render.com) → connect repo
-3. Render auto-detects `render.yaml` — no config needed
-4. Add env var: `MONGO_URL` (from MongoDB Atlas)
-5. Copy the deployed URL
-
-### Frontend → Netlify
-
-1. [New Site](https://netlify.com) → Import from Git
-2. Netlify auto-detects `netlify.toml`
-3. Add env var: `VITE_API_BASE_URL=https://your-render-url.onrender.com`
-4. Deploy 🚀
-
 <br/>
 
----
-
-## ✦ Running Tests
+## ✦ Testing
 
 ```bash
-# Backend unit tests
-cd backend
-python -m pytest -q
-
-# Generate models (required before tests)
+# Generate models first (required)
 python create_dummy_models.py
 
-# Full system verification
+# Backend unit tests
+cd backend && python -m pytest -q
+
+# Full system verification — imports, types, routers, components
 python test_system.py
 ```
 
-CI runs automatically on every push via GitHub Actions (`.github/workflows/backend-ci.yml`).
+CI runs on every push via GitHub Actions — see `.github/workflows/backend-ci.yml`.
 
 <br/>
 
 ---
+
+<br/>
+
+## ✦ One-Click Deployment
+
+**Backend → [Render](https://render.com)**
+
+```
+1. New Web Service → connect GitHub repo
+2. Render auto-reads render.yaml — no manual config needed
+3. Add env var:  MONGO_URL  (MongoDB Atlas → Connect → Drivers)
+4. Deploy — copy your public URL
+```
+
+**Frontend → [Netlify](https://netlify.com)**
+
+```
+1. New Site → Import from Git → connect repo
+2. Netlify auto-reads netlify.toml — no manual config needed
+3. Add env var:  VITE_API_BASE_URL=https://your-render-url.onrender.com
+4. Deploy
+```
+
+<br/>
+
+---
+
+<br/>
 
 ## ✦ Roadmap
 
-- [x] Multi-domain bias detection (Hiring · Loan · Social)
+- [x] Multi-domain bias detection — Hiring · Loan · Social
 - [x] SHAP feature importance explanations
-- [x] Real-time mitigation with Before/After comparison
-- [x] Ground-truth feedback loop
-- [x] File manager (CSV, PDF, images, JSON)
-- [x] MongoDB + JSON fallback storage
+- [x] Live mitigation with configurable strength and before/after view
+- [x] Ground-truth feedback annotation loop
+- [x] Universal file manager — CSV, PDF, images, JSON, archives
+- [x] MongoDB + zero-config JSON fallback
+- [x] Dark mode + collapsible sidebar
 - [ ] Custom dataset upload → auto-train pipeline
 - [ ] PDF audit report generation
-- [ ] Slack / webhook alerts on bias threshold breach
+- [ ] Slack / webhook alerts on threshold breach
 - [ ] Multi-model comparison view
-- [ ] Role-based access control (auditor vs analyst vs admin)
+- [ ] Role-based access control — auditor · analyst · admin
 
 <br/>
 
 ---
 
+<br/>
+
 <div align="center">
 
-**Built with care for Fair AI**
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=15&duration=4000&pause=2000&color=10B981&center=true&vCenter=true&width=640&lines=Built+to+make+AI+fair%2C+explainable%2C+and+auditable+for+everyone." alt="Footer tagline" />
 
-[![Python](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+<br/><br/>
+
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB)](https://react.dev)
-[![Tailwind](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
 [![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikit-learn&logoColor=white)](https://scikit-learn.org)
 [![MongoDB](https://img.shields.io/badge/MongoDB-4EA94B?style=flat-square&logo=mongodb&logoColor=white)](https://mongodb.com)
-[![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev)
+[![Netlify](https://img.shields.io/badge/Netlify-00C7B7?style=flat-square&logo=netlify&logoColor=white)](https://netlify.com)
+[![Render](https://img.shields.io/badge/Render-46E3B7?style=flat-square&logo=render&logoColor=white)](https://render.com)
+
+<br/><br/>
+
+*"Fairness is not a feature — it is a responsibility."*
 
 <br/>
 
-*"Fairness is not a feature — it's a requirement."*
+**⭐ &nbsp;Star this repo if you believe AI should work equally for everyone.**
+
+<br/>
+
+<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=10b981&height=120&section=footer"/>
 
 </div>
