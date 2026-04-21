@@ -8,6 +8,7 @@
 ╚██████╔╝██║ ╚████║██████╔╝██║██║  ██║███████║███████╗██████╔╝    ██║  ██║██║
  ╚═════╝ ╚═╝  ╚═══╝╚═════╝ ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚═════╝     ╚═╝  ╚═╝╚═╝
 ```
+<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=0d8c15&height=200&section=header&text=Customer%20Churn%20Analysis&fontSize=40&fontColor=ffffff&fontAlignY=38&desc=End-to-end%20Business%20Intelligence%20Dashboard&descAlignY=58&descSize=16"/>
 
 <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&duration=3000&pause=1000&color=10B981&center=true&vCenter=true&multiline=true&width=700&height=80&lines=Detect.+Analyze.+Mitigate.;Building+Fairer+AI+%E2%80%94+One+Model+at+a+Time." alt="Typing SVG" />
 
