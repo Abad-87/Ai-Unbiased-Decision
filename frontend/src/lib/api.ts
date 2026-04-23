@@ -6,7 +6,8 @@
  * Set the same var in Netlify/Vercel for production pointing to Render URL.
  */
 
-const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:8000";
+// Use relative URLs in development (proxied by Vite), full URL in production
+const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
 // ─── HTTP helpers ──────────────────────────────────────────────────────────────
 
