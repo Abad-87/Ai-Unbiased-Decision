@@ -3,10 +3,10 @@ import {
   Upload, Database, Trash2, AlertCircle, X, FileText, 
   Image as ImageIcon, FileSpreadsheet, FileArchive, FileCode, File as FileIcon,
   Loader2, Search, Download, Grid, List as ListIcon,
-  RefreshCw, HardDrive, Plus
+  RefreshCw, HardDrive, Plus, Eye, ScanSearch
 } from 'lucide-react';
 import { api } from '../../lib/api';
-import type { FileMetadata, FileStats, DatasetAnalysisResult } from '../../lib/api';
+import type { FileMetadata, FileStats, DatasetAnalysisResult, FileInspectionResult } from '../../lib/api';
 
 type ViewMode = 'grid' | 'list';
 type FileCategory = 'all' | 'image' | 'document' | 'data' | 'archive' | 'other';
@@ -43,7 +43,16 @@ const ALLOWED_TYPES = [
   '.py', '.js', '.ts', '.html', '.css', '.md', '.log',
 ];
 
-export function Datasets() {
+interface DatasetsProps {
+  /**
+   * Increment this value to trigger a full auto-scan of every uploaded file
+   * (inspection for all kinds + analysis for data files). Used by the
+   * "New Scan" button in TopNavbar.
+   */
+  scanTrigger?: number;
+}
+
+export function Datasets({ scanTrigger = 0 }: DatasetsProps) {
   // Upload states
   const [dragActive, setDragActive] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState<Map<string, { name: string; progress: number }>>(new Map());
@@ -65,6 +74,16 @@ export function Datasets() {
   // Analysis states
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<DatasetAnalysisResult | null>(null);
+
+  // Auto-inspection states (content scan for ANY file type)
+  const [inspecting, setInspecting] = useState(false);
+  const [inspections, setInspections] = useState<FileInspectionResult[]>([]);
+  const [selectedInspection, setSelectedInspection] = useState<FileInspectionResult | null>(null);
+
+  // Full-system scan state (triggered by "New Scan" button in TopNavbar)
+  const [scanRunning, setScanRunning] = useState(false);
+  const [scanProgress, setScanProgress] = useState<{ done: number; total: number; current: string }>({ done: 0, total: 0, current: '' });
+  const [scanReport, setScanReport] = useState<ScanReport | null>(null);
 
   const fetchFiles = useCallback(async () => {
     setLoading(true);
@@ -154,11 +173,36 @@ export function Datasets() {
       // Clear form
       setDescription('');
       setTags('');
-      
-      // Auto-analyze data files (CSV, Excel, JSON, Parquet)
+
+      // Auto-inspect EVERY uploaded file — regardless of type — so the user
+      // immediately sees the extracted content in a clear, readable format.
+      setInspecting(true);
+      const inspectionResults: FileInspectionResult[] = [];
+      for (const uf of uploadedFiles) {
+        try {
+          const ins = await api.inspectFile(uf.id);
+          inspectionResults.push(ins);
+        } catch (err) {
+          console.warn('Inspection failed for', uf.filename, err);
+        }
+      }
+      setInspections(inspectionResults);
+      if (inspectionResults.length > 0) {
+        setSelectedInspection(inspectionResults[0]);
+      }
+      setInspecting(false);
+
+      // Auto-analyze data files (CSV, Excel, JSON, Parquet) — this also
+      // auto-detects the domain and reflects it in the form field below.
       const dataFiles = uploadedFiles.filter(f => f.category === 'data');
       if (dataFiles.length > 0) {
-        await handleAnalyze(dataFiles[0].id);
+        const analysis = await handleAnalyze(dataFiles[0].id);
+        if (analysis?.detected_domain) {
+          const d = analysis.detected_domain;
+          if (d === 'loan' || d === 'hiring' || d === 'social') {
+            setDomain(d);
+          }
+        }
       }
     } catch (err) {
       alert('Some files failed to upload. Please try again.');
@@ -185,17 +229,112 @@ export function Datasets() {
     a.click();
   };
 
-  const handleAnalyze = async (fileId: string) => {
+  const handleAnalyze = async (fileId: string): Promise<DatasetAnalysisResult | null> => {
     setAnalyzing(true);
     try {
       const result = await api.analyzeDataset(fileId);
       setAnalysisResult(result);
+      return result;
     } catch (err) {
       alert('Analysis failed: ' + (err as Error).message);
+      return null;
     } finally {
       setAnalyzing(false);
     }
   };
+
+  const handleInspect = async (fileId: string) => {
+    setInspecting(true);
+    try {
+      const ins = await api.inspectFile(fileId);
+      setInspections([ins]);
+      setSelectedInspection(ins);
+    } catch (err) {
+      alert('Inspection failed: ' + (err as Error).message);
+    } finally {
+      setInspecting(false);
+    }
+  };
+
+  const scanAllFiles = useCallback(async () => {
+    setScanRunning(true);
+    setScanReport(null);
+    try {
+      // Always fetch the freshest list — ignore current category filter.
+      const listRes = await api.listFiles({ limit: 500 });
+      const allFiles = listRes.files;
+
+      if (allFiles.length === 0) {
+        setScanReport({
+          started_at: new Date().toISOString(),
+          finished_at: new Date().toISOString(),
+          total_files: 0,
+          inspections: [],
+          analyses: [],
+          insights: ['No files uploaded yet. Drop a CSV, Excel, JSON, image or PDF above and run the scan again.'],
+        });
+        return;
+      }
+
+      setScanProgress({ done: 0, total: allFiles.length, current: '' });
+
+      const inspectionResults: FileInspectionResult[] = [];
+      const analysisResults: Array<{ file: FileMetadata; result: DatasetAnalysisResult }> = [];
+
+      for (let i = 0; i < allFiles.length; i++) {
+        const f = allFiles[i];
+        setScanProgress({ done: i, total: allFiles.length, current: f.filename });
+
+        // 1. Inspect every file
+        try {
+          const ins = await api.inspectFile(f.id);
+          inspectionResults.push(ins);
+        } catch (err) {
+          console.warn('Inspection failed for', f.filename, err);
+        }
+
+        // 2. Analyze tabular data files only
+        if (f.category === 'data') {
+          try {
+            const res = await api.analyzeDataset(f.id);
+            analysisResults.push({ file: f, result: res });
+            // Reflect detected domain into the upload form field
+            if (res.detected_domain && (res.detected_domain === 'loan' || res.detected_domain === 'hiring' || res.detected_domain === 'social')) {
+              setDomain(res.detected_domain);
+            }
+          } catch (err) {
+            console.warn('Analysis failed for', f.filename, err);
+          }
+        }
+      }
+
+      setScanProgress({ done: allFiles.length, total: allFiles.length, current: '' });
+      setInspections(inspectionResults);
+      if (inspectionResults.length > 0) setSelectedInspection(inspectionResults[0]);
+
+      // 3. Build human-readable insights
+      const insights = buildInsights(allFiles, inspectionResults, analysisResults);
+
+      setScanReport({
+        started_at: new Date().toISOString(),
+        finished_at: new Date().toISOString(),
+        total_files: allFiles.length,
+        inspections: inspectionResults,
+        analyses: analysisResults,
+        insights,
+      });
+    } catch (err) {
+      alert('Scan failed: ' + (err as Error).message);
+    } finally {
+      setScanRunning(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (scanTrigger > 0) {
+      scanAllFiles();
+    }
+  }, [scanTrigger]);
 
   const filteredFiles = files.filter(file => 
     file.filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -381,8 +520,54 @@ export function Datasets() {
           >
             <RefreshCw size={20} />
           </button>
+          <button
+            onClick={scanAllFiles}
+            disabled={scanRunning}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-medium transition-all duration-200 hover:scale-105 shadow-md"
+            title="Scan & analyze every uploaded file automatically"
+          >
+            {scanRunning ? <Loader2 size={18} className="animate-spin" /> : <ScanSearch size={18} />}
+            {scanRunning ? 'Scanning...' : 'Scan All Files'}
+          </button>
         </div>
       </div>
+
+      {/* Scan progress */}
+      {scanRunning && (
+        <div className="bg-white dark:bg-zinc-900 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <Loader2 className="animate-spin text-emerald-600" size={20} />
+            <p className="text-sm font-medium dark:text-white">
+              Running full-system scan — {scanProgress.done}/{scanProgress.total} files processed
+            </p>
+          </div>
+          <div className="h-2 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+            <div
+              className="h-full bg-emerald-500 transition-all duration-300"
+              style={{ width: `${scanProgress.total ? (scanProgress.done / scanProgress.total) * 100 : 0}%` }}
+            />
+          </div>
+          {scanProgress.current && (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2 truncate">
+              Current: <span className="font-mono">{scanProgress.current}</span>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Scan report */}
+      {scanReport && !scanRunning && (
+        <ScanReportPanel report={scanReport} onClose={() => setScanReport(null)} />
+      )}
+
+      {inspecting && (
+        <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-2xl p-4">
+          <Loader2 className="animate-spin text-blue-600" size={20} />
+          <p className="text-sm text-blue-700 dark:text-blue-300">
+            Scanning uploaded files and extracting content...
+          </p>
+        </div>
+      )}
 
       {analyzing && (
         <div className="flex items-center gap-3 bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4">
@@ -391,6 +576,16 @@ export function Datasets() {
             Analyzing uploaded dataset and generating insights...
           </p>
         </div>
+      )}
+
+      {/* Extracted Details Panel — auto-populated for any uploaded file */}
+      {selectedInspection && (
+        <InspectionPanel
+          inspection={selectedInspection}
+          allInspections={inspections}
+          onSelect={setSelectedInspection}
+          onClose={() => { setInspections([]); setSelectedInspection(null); }}
+        />
       )}
 
       {/* File List */}
@@ -486,6 +681,22 @@ export function Datasets() {
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => handleInspect(file.id)}
+                        className="p-2 hover:bg-blue-50 dark:hover:bg-blue-950 rounded-lg text-blue-600 transition-all duration-200 hover:scale-110"
+                        title="Scan & extract content"
+                      >
+                        <ScanSearch size={18} />
+                      </button>
+                      {file.category === 'data' && (
+                        <button
+                          onClick={() => handleAnalyze(file.id)}
+                          className="p-2 hover:bg-emerald-50 dark:hover:bg-emerald-950 rounded-lg text-emerald-600 transition-all duration-200 hover:scale-110"
+                          title="Analyze dataset"
+                        >
+                          <Eye size={18} />
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDownload(file)}
                         className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg text-zinc-600 transition-all duration-200 hover:scale-110"
@@ -745,10 +956,20 @@ export function Datasets() {
               )}
 
               {/* Actions */}
-              <div className="flex gap-3 pt-4 border-t dark:border-zinc-800">
+              <div className="flex flex-wrap gap-3 pt-4 border-t dark:border-zinc-800">
+                <button
+                  onClick={() => {
+                    handleInspect(selectedFile.id);
+                    setSelectedFile(null);
+                  }}
+                  className="flex-1 min-w-[140px] flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/30"
+                >
+                  <ScanSearch size={20} />
+                  Scan Content
+                </button>
                 <button
                   onClick={() => handleDownload(selectedFile)}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-emerald-500/30"
+                  className="flex-1 min-w-[140px] flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-emerald-500/30"
                 >
                   <Download size={20} />
                   Download File
@@ -758,7 +979,7 @@ export function Datasets() {
                     handleDelete(selectedFile.id);
                     setSelectedFile(null);
                   }}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-100 hover:bg-red-200 text-red-700 rounded-2xl font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-red-500/30"
+                  className="flex-1 min-w-[140px] flex items-center justify-center gap-2 py-3 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-950 dark:hover:bg-red-900 dark:text-red-300 rounded-2xl font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-red-500/30"
                 >
                   <Trash2 size={20} />
                   Delete File
@@ -772,7 +993,11 @@ export function Datasets() {
       {/* Tips */}
       <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-3xl p-6">
         <p className="text-sm text-blue-800 dark:text-blue-300">
-          Data files (CSV, Excel, JSON, Parquet) are <strong>automatically analyzed</strong> after upload — the system detects the domain, maps columns, and runs batch predictions. Results appear in the Dashboard. Other file types are stored for management only.
+          Every uploaded file is <strong>scanned automatically</strong>: the system reads the
+          contents, extracts schema/preview/stats, and displays the results in the Extracted
+          Details panel above. Data files (CSV, Excel, JSON, Parquet) additionally get domain
+          auto-detection, column mapping, and batch predictions — the detected domain is
+          reflected back into the form field above. No manual setup required.
         </p>
       </div>
 
@@ -782,17 +1007,490 @@ export function Datasets() {
           <div>
             <h3 className="font-semibold text-amber-800 dark:text-amber-300">Supported File Types</h3>
             <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2 text-sm text-amber-700 dark:text-amber-400">
-              <div>• Images (JPG, PNG, GIF, SVG, WebP)</div>
-              <div>• Documents (PDF, DOC, DOCX, TXT)</div>
-              <div>• Spreadsheets (CSV, XLS, XLSX)</div>
-              <div>• Data (JSON, XML, YAML, Parquet)</div>
-              <div>• Archives (ZIP, TAR, GZ)</div>
-              <div>• Code files (PY, JS, TS, HTML, MD)</div>
-              <div>• Max {fileStats?.max_file_size_mb || 100}MB per file</div>
-              <div>• All files stored securely</div>
+              <div>Images (JPG, PNG, GIF, SVG, WebP)</div>
+              <div>Documents (PDF, DOC, DOCX, TXT)</div>
+              <div>Spreadsheets (CSV, XLS, XLSX)</div>
+              <div>Data (JSON, XML, YAML, Parquet)</div>
+              <div>Archives (ZIP, TAR, GZ)</div>
+              <div>Code files (PY, JS, TS, HTML, MD)</div>
+              <div>Max {fileStats?.max_file_size_mb || 100}MB per file</div>
+              <div>All files stored securely</div>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Inspection Panel (Extracted Details) ────────────────────────────────────
+
+interface InspectionPanelProps {
+  inspection: FileInspectionResult;
+  allInspections: FileInspectionResult[];
+  onSelect: (ins: FileInspectionResult) => void;
+  onClose: () => void;
+}
+
+function InspectionPanel({ inspection, allInspections, onSelect, onClose }: InspectionPanelProps) {
+  return (
+    <div className="bg-white dark:bg-zinc-900 border border-blue-200 dark:border-blue-800 rounded-3xl overflow-hidden">
+      <div className="flex items-center justify-between p-6 border-b border-zinc-200 dark:border-zinc-800 bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-950">
+        <div className="flex items-center gap-3">
+          <ScanSearch className="text-blue-600" size={24} />
+          <div>
+            <h2 className="text-lg font-semibold dark:text-white">Extracted Details</h2>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Auto-scan of <span className="font-medium dark:text-zinc-200">{inspection.filename}</span>
+              <span className="ml-2 inline-block text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 uppercase">{inspection.kind}</span>
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+          aria-label="Close extracted details"
+        >
+          <X size={20} className="dark:text-zinc-400" />
+        </button>
+      </div>
+
+      {allInspections.length > 1 && (
+        <div className="flex gap-2 flex-wrap px-6 pt-4">
+          {allInspections.map((ins) => (
+            <button
+              key={ins.file_id}
+              onClick={() => onSelect(ins)}
+              className={`text-xs px-3 py-1.5 rounded-full transition-all ${
+                ins.file_id === inspection.file_id
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+              }`}
+            >
+              {ins.filename}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="p-6 space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <InfoTile label="Size" value={inspection.size_human} />
+          <InfoTile label="Type" value={inspection.extension || '-'} />
+          <InfoTile label="Category" value={inspection.category} />
+          <InfoTile
+            label={
+              inspection.kind === 'tabular' ? 'Rows x Cols' :
+              inspection.kind === 'text' ? 'Lines' :
+              inspection.kind === 'image' ? 'Dimensions' :
+              inspection.kind === 'pdf' ? 'Pages' :
+              inspection.kind === 'json' || inspection.kind === 'yaml' ? 'Root' : 'Kind'
+            }
+            value={
+              inspection.kind === 'tabular'
+                ? `${inspection.rows ?? '-'} x ${inspection.columns_count ?? '-'}`
+                : inspection.kind === 'text'
+                  ? String(inspection.line_count ?? '-')
+                  : inspection.kind === 'image'
+                    ? (inspection.width && inspection.height ? `${inspection.width}x${inspection.height}` : '-')
+                    : inspection.kind === 'pdf'
+                      ? String(inspection.page_count ?? '-')
+                      : (inspection.root_type ?? inspection.kind)
+            }
+          />
+        </div>
+
+        {inspection.kind === 'tabular' && inspection.columns && inspection.columns.length > 0 && (
+          <>
+            <div>
+              <h3 className="font-semibold dark:text-white mb-3">Detected Schema</h3>
+              <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+                <table className="w-full text-sm">
+                  <thead className="bg-zinc-50 dark:bg-zinc-800">
+                    <tr>
+                      <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Column</th>
+                      <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Type</th>
+                      <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Nulls</th>
+                      <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Unique</th>
+                      <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Samples</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inspection.columns.map((c) => (
+                      <tr key={c.name} className="border-t border-zinc-200 dark:border-zinc-800">
+                        <td className="py-2 px-3 font-medium dark:text-white">{c.name}</td>
+                        <td className="py-2 px-3 text-zinc-600 dark:text-zinc-400">{c.dtype}</td>
+                        <td className="py-2 px-3 dark:text-white">{c.null_count}</td>
+                        <td className="py-2 px-3 dark:text-white">{c.unique_count}</td>
+                        <td className="py-2 px-3 text-zinc-500 dark:text-zinc-400 truncate max-w-[240px]" title={c.sample_values.join(', ')}>
+                          {c.sample_values.join(', ') || '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {inspection.preview_rows && inspection.preview_rows.length > 0 && (
+              <div>
+                <h3 className="font-semibold dark:text-white mb-3">Preview (first {inspection.preview_rows.length} rows)</h3>
+                <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+                  <table className="w-full text-sm">
+                    <thead className="bg-zinc-50 dark:bg-zinc-800">
+                      <tr>
+                        {Object.keys(inspection.preview_rows[0]).map((k) => (
+                          <th key={k} className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{k}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {inspection.preview_rows.map((row, i) => (
+                        <tr key={i} className="border-t border-zinc-200 dark:border-zinc-800">
+                          {Object.keys(inspection.preview_rows![0]).map((k) => (
+                            <td key={k} className="py-2 px-3 dark:text-zinc-200 whitespace-nowrap">
+                              {row[k] === null || row[k] === undefined
+                                ? <span className="text-zinc-400">null</span>
+                                : String(row[k])}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {(inspection.kind === 'json' || inspection.kind === 'yaml' || inspection.kind === 'xml') && (
+          <div>
+            <h3 className="font-semibold dark:text-white mb-3">Structure</h3>
+            {(inspection.keys || inspection.item_keys) && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {(inspection.keys ?? inspection.item_keys ?? []).map((k) => (
+                  <span key={k} className="text-xs px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-200">{k}</span>
+                ))}
+              </div>
+            )}
+            {inspection.preview && (
+              <pre className="text-xs p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 overflow-auto max-h-80 text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap">
+                {inspection.preview}
+              </pre>
+            )}
+          </div>
+        )}
+
+        {inspection.kind === 'text' && (
+          <div>
+            <h3 className="font-semibold dark:text-white mb-3">Content Preview</h3>
+            <div className="flex gap-4 text-xs text-zinc-500 dark:text-zinc-400 mb-2">
+              <span>Lines: <span className="font-medium dark:text-zinc-200">{inspection.line_count ?? '-'}</span></span>
+              <span>Words: <span className="font-medium dark:text-zinc-200">{inspection.word_count ?? '-'}</span></span>
+              <span>Chars: <span className="font-medium dark:text-zinc-200">{inspection.char_count ?? '-'}</span></span>
+            </div>
+            <pre className="text-xs p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 overflow-auto max-h-80 text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap">
+              {inspection.preview || '(empty)'}
+            </pre>
+          </div>
+        )}
+
+        {inspection.kind === 'image' && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <InfoTile label="Width" value={`${inspection.width ?? '-'} px`} />
+            <InfoTile label="Height" value={`${inspection.height ?? '-'} px`} />
+            <InfoTile label="Mode" value={inspection.mode ?? '-'} />
+            <InfoTile label="Format" value={inspection.format ?? '-'} />
+          </div>
+        )}
+
+        {inspection.kind === 'pdf' && (
+          <div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm mb-3">
+              <InfoTile label="Pages" value={String(inspection.page_count ?? '-')} />
+              <InfoTile label="Title" value={inspection.metadata?.title || '-'} />
+              <InfoTile label="Author" value={inspection.metadata?.author || '-'} />
+            </div>
+            {inspection.preview && (
+              <>
+                <h3 className="font-semibold dark:text-white mb-2">First page text</h3>
+                <pre className="text-xs p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 overflow-auto max-h-60 text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap">
+                  {inspection.preview}
+                </pre>
+              </>
+            )}
+          </div>
+        )}
+
+        {(inspection.kind === 'binary' || inspection.kind === 'unknown') && (
+          <div className="text-sm text-zinc-600 dark:text-zinc-400">
+            {inspection.note || inspection.error || 'No content inspector available for this file type.'}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InfoTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">{label}</p>
+      <p className="font-medium dark:text-white truncate" title={value}>{value}</p>
+    </div>
+  );
+}
+
+// ─── Full-System Scan Report ────────────────────────────────────────────────
+
+interface ScanReport {
+  started_at: string;
+  finished_at: string;
+  total_files: number;
+  inspections: FileInspectionResult[];
+  analyses: Array<{ file: FileMetadata; result: DatasetAnalysisResult }>;
+  insights: string[];
+}
+
+/**
+ * Turn raw scan outputs into plain-English insights the user can read
+ * without needing to understand the underlying schema.
+ */
+function buildInsights(
+  files: FileMetadata[],
+  inspections: FileInspectionResult[],
+  analyses: Array<{ file: FileMetadata; result: DatasetAnalysisResult }>,
+): string[] {
+  const insights: string[] = [];
+
+  // Category breakdown
+  const byCat: Record<string, number> = {};
+  for (const f of files) byCat[f.category] = (byCat[f.category] ?? 0) + 1;
+  const catSummary = Object.entries(byCat).map(([c, n]) => `${n} ${c}`).join(', ');
+  insights.push(`Scanned ${files.length} file${files.length === 1 ? '' : 's'}: ${catSummary}.`);
+
+  // Tabular totals
+  const tabular = inspections.filter((i) => i.kind === 'tabular');
+  if (tabular.length > 0) {
+    const totalRows = tabular.reduce((s, i) => s + (i.rows ?? 0), 0);
+    const totalCols = tabular.reduce((s, i) => s + (i.columns_count ?? 0), 0);
+    insights.push(
+      `Found ${tabular.length} tabular dataset${tabular.length === 1 ? '' : 's'} containing approximately ${totalRows.toLocaleString()} rows across ${totalCols} columns.`,
+    );
+  }
+
+  // Analyses (domain detection + predictions)
+  const succeeded = analyses.filter((a) => a.result.success);
+  const failed = analyses.filter((a) => !a.result.success);
+
+  if (succeeded.length > 0) {
+    const domainCounts: Record<string, number> = {};
+    let totalRowsPredicted = 0;
+    let totalFlagged = 0;
+    let weightedApproval = 0;
+    let weightedConfidence = 0;
+    let weightTotal = 0;
+
+    for (const { result } of succeeded) {
+      if (result.detected_domain) {
+        domainCounts[result.detected_domain] = (domainCounts[result.detected_domain] ?? 0) + 1;
+      }
+      const n = result.rows_predicted || 0;
+      totalRowsPredicted += n;
+      totalFlagged += result.summary?.flagged_for_review ?? 0;
+      if (n > 0 && result.summary) {
+        weightedApproval += (result.summary.approval_rate ?? 0) * n;
+        weightedConfidence += (result.summary.avg_confidence ?? 0) * n;
+        weightTotal += n;
+      }
+    }
+
+    const domainList = Object.entries(domainCounts)
+      .map(([d, n]) => `${n} x ${d}`)
+      .join(', ');
+    insights.push(
+      `Auto-detected domains for ${succeeded.length} dataset${succeeded.length === 1 ? '' : 's'} (${domainList}) and ran batch predictions on ${totalRowsPredicted.toLocaleString()} rows.`,
+    );
+
+    if (weightTotal > 0) {
+      const approvalPct = Math.round((weightedApproval / weightTotal) * 100);
+      const confidencePct = Math.round((weightedConfidence / weightTotal) * 100);
+      insights.push(
+        `Overall positive-decision rate: ${approvalPct}%. Average model confidence: ${confidencePct}%.`,
+      );
+    }
+    if (totalFlagged > 0) {
+      insights.push(
+        `${totalFlagged.toLocaleString()} record${totalFlagged === 1 ? '' : 's'} flagged for fairness review — see Bias Detection for details.`,
+      );
+    } else if (totalRowsPredicted > 0) {
+      insights.push('No records were flagged for high bias risk. Models appear within fairness thresholds on this data.');
+    }
+  }
+
+  if (failed.length > 0) {
+    insights.push(
+      `${failed.length} dataset${failed.length === 1 ? '' : 's'} could not be auto-mapped (unknown schema). Rename columns to match hiring/loan/social fields for automatic analysis.`,
+    );
+  }
+
+  // Non-tabular observations
+  const images = inspections.filter((i) => i.kind === 'image').length;
+  const pdfs = inspections.filter((i) => i.kind === 'pdf').length;
+  const texts = inspections.filter((i) => i.kind === 'text').length;
+  const extras: string[] = [];
+  if (images) extras.push(`${images} image${images === 1 ? '' : 's'} inspected (dimensions extracted)`);
+  if (pdfs) extras.push(`${pdfs} PDF${pdfs === 1 ? '' : 's'} inspected (page count + first-page text)`);
+  if (texts) extras.push(`${texts} text/code file${texts === 1 ? '' : 's'} inspected (line & word counts)`);
+  if (extras.length) insights.push(extras.join(' · '));
+
+  return insights;
+}
+
+interface ScanReportPanelProps {
+  report: ScanReport;
+  onClose: () => void;
+}
+
+function ScanReportPanel({ report, onClose }: ScanReportPanelProps) {
+  const duration = (new Date(report.finished_at).getTime() - new Date(report.started_at).getTime()) / 1000;
+
+  // Aggregate numbers for the summary tiles
+  const dataCount = report.analyses.length;
+  const successCount = report.analyses.filter((a) => a.result.success).length;
+  const totalRowsPredicted = report.analyses.reduce((s, a) => s + (a.result.rows_predicted || 0), 0);
+  const totalFlagged = report.analyses.reduce((s, a) => s + (a.result.summary?.flagged_for_review ?? 0), 0);
+
+  return (
+    <div className="bg-white dark:bg-zinc-900 border-2 border-emerald-500 rounded-3xl overflow-hidden shadow-lg shadow-emerald-500/10">
+      <div className="flex items-center justify-between p-6 border-b border-zinc-200 dark:border-zinc-800 bg-gradient-to-r from-emerald-50 to-transparent dark:from-emerald-950">
+        <div className="flex items-center gap-3">
+          <ScanSearch className="text-emerald-600" size={26} />
+          <div>
+            <h2 className="text-xl font-semibold dark:text-white">Scan Complete</h2>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Processed {report.total_files} file{report.total_files === 1 ? '' : 's'} in {duration.toFixed(1)}s ·
+              <span className="ml-1">{new Date(report.finished_at).toLocaleTimeString()}</span>
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+          aria-label="Dismiss scan report"
+        >
+          <X size={20} className="dark:text-zinc-400" />
+        </button>
+      </div>
+
+      <div className="p-6 space-y-6">
+        {/* Headline tiles */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <InfoTile label="Files scanned" value={String(report.total_files)} />
+          <InfoTile label="Datasets analyzed" value={`${successCount} / ${dataCount}`} />
+          <InfoTile label="Rows predicted" value={totalRowsPredicted.toLocaleString()} />
+          <InfoTile
+            label="Flagged for review"
+            value={totalFlagged > 0 ? `${totalFlagged} (high bias risk)` : '0'}
+          />
+        </div>
+
+        {/* Plain-English insights */}
+        <div>
+          <h3 className="font-semibold dark:text-white mb-3 flex items-center gap-2">
+            <Eye className="text-emerald-600" size={18} />
+            Insights
+          </h3>
+          <ul className="space-y-2">
+            {report.insights.map((line, i) => (
+              <li key={i} className="flex gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                <span className="text-emerald-600 mt-0.5">•</span>
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Per-dataset breakdown */}
+        {report.analyses.length > 0 && (
+          <div>
+            <h3 className="font-semibold dark:text-white mb-3">Per-Dataset Results</h3>
+            <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+              <table className="w-full text-sm">
+                <thead className="bg-zinc-50 dark:bg-zinc-800">
+                  <tr>
+                    <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">File</th>
+                    <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Detected Domain</th>
+                    <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Confidence</th>
+                    <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Rows</th>
+                    <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Approval Rate</th>
+                    <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Flagged</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.analyses.map(({ file, result }) => (
+                    <tr key={file.id} className="border-t border-zinc-200 dark:border-zinc-800">
+                      <td className="py-2 px-3 font-medium dark:text-white truncate max-w-[220px]" title={file.filename}>
+                        {file.filename}
+                      </td>
+                      <td className="py-2 px-3">
+                        {result.detected_domain ? (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 capitalize">
+                            {result.detected_domain}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-zinc-400">unknown</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 dark:text-white">
+                        {result.confidence ? `${Math.round(result.confidence * 100)}%` : '-'}
+                      </td>
+                      <td className="py-2 px-3 dark:text-white">
+                        {result.rows_predicted.toLocaleString()} / {result.rows_total.toLocaleString()}
+                      </td>
+                      <td className="py-2 px-3 dark:text-white">
+                        {result.summary ? `${Math.round((result.summary.approval_rate ?? 0) * 100)}%` : '-'}
+                      </td>
+                      <td className={`py-2 px-3 font-medium ${((result.summary?.flagged_for_review ?? 0) > 0) ? 'text-red-600' : 'text-emerald-600'}`}>
+                        {result.summary?.flagged_for_review ?? 0}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Per-file content map */}
+        {report.inspections.length > 0 && (
+          <div>
+            <h3 className="font-semibold dark:text-white mb-3">Content Map</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {report.inspections.map((ins) => (
+                <div
+                  key={ins.file_id}
+                  className="flex items-center justify-between gap-2 text-xs bg-zinc-50 dark:bg-zinc-800 rounded-lg px-3 py-2"
+                >
+                  <span className="truncate font-mono text-zinc-700 dark:text-zinc-300" title={ins.filename}>
+                    {ins.filename}
+                  </span>
+                  <span className="flex gap-1 flex-shrink-0">
+                    <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 uppercase">
+                      {ins.kind}
+                    </span>
+                    {ins.kind === 'tabular' && (
+                      <span className="px-2 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-700 dark:text-zinc-200">
+                        {ins.rows ?? 0}r x {ins.columns_count ?? 0}c
+                      </span>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

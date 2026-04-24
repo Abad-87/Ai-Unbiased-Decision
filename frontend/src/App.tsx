@@ -24,13 +24,21 @@ type Page =
 
 function App() {
   const [activePage, setActivePage] = useState<Page>('dashboard');
+  // Incremented every time "New Scan" is clicked. Datasets page watches this
+  // and auto-scans every uploaded file + analyzes datasets without manual setup.
+  const [scanTrigger, setScanTrigger] = useState(0);
+
+  const handleNewScan = () => {
+    setActivePage('datasets');
+    setScanTrigger((n) => n + 1);
+  };
 
   const renderPage = () => {
     switch (activePage) {
       case 'dashboard':
         return <Dashboard />;
       case 'datasets':
-        return <Datasets />;
+        return <Datasets scanTrigger={scanTrigger} />;
       case 'bias-detection':
         return <BiasDetection />;
       case 'fairness-explorer':
@@ -58,7 +66,7 @@ function App() {
       />
       
       <div className="flex-1 flex flex-col overflow-hidden">
-        <TopNavbar onNewScan={() => setActivePage('fairness-explorer')} />
+        <TopNavbar onNewScan={handleNewScan} />
         <main className="flex-1 overflow-auto p-6 bg-zinc-50 dark:bg-zinc-950">
           {renderPage()}
         </main>

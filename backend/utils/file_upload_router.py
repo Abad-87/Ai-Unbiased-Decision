@@ -368,6 +368,34 @@ async def get_stats():
     }
 
 
+@router.get("/inspect/{file_id}")
+async def inspect_file_endpoint(file_id: str):
+    """
+    Content-aware inspection of any uploaded file.
+    Returns schema/preview/stats depending on the file type so the frontend
+    can render a clear, human-readable summary without manual setup.
+    """
+    from .file_inspector import inspect_file
+
+    meta_path = UPLOAD_DIR / f"{file_id}.json"
+    if not meta_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    import json as _json
+    with open(meta_path) as f:
+        metadata = _json.load(f)
+
+    file_path = UPLOAD_DIR / metadata.get("stored_name", "")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File data not found")
+
+    try:
+        result = inspect_file(file_path, metadata)
+        return JSONResponse(content=result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Inspection failed: {str(e)}")
+
+
 @router.post("/analyze/{file_id}")
 async def analyze_file(file_id: str):
     """

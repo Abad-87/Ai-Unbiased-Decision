@@ -247,6 +247,56 @@ export interface MitigationMethodInfo {
   best_for: string[];
 }
 
+// ─── File Inspection types ───────────────────────────────────────────────────
+
+export interface FileInspectionColumn {
+  name: string;
+  dtype: string;
+  null_count: number;
+  unique_count: number;
+  sample_values: string[];
+}
+
+export interface FileInspectionResult {
+  file_id: string;
+  filename: string;
+  extension: string;
+  category: string;
+  size_bytes: number;
+  size_human: string;
+  kind: 'tabular' | 'json' | 'yaml' | 'xml' | 'text' | 'image' | 'pdf' | 'binary' | 'unknown';
+  // tabular
+  rows?: number;
+  columns_count?: number;
+  columns?: FileInspectionColumn[];
+  preview_rows?: Record<string, unknown>[];
+  numeric_stats?: Record<string, Record<string, number>>;
+  // json / yaml
+  root_type?: string;
+  length?: number;
+  key_count?: number;
+  keys?: string[];
+  item_keys?: string[];
+  // text
+  line_count?: number;
+  word_count?: number;
+  char_count?: number;
+  preview?: string;
+  // image
+  width?: number;
+  height?: number;
+  mode?: string;
+  format?: string;
+  // pdf
+  page_count?: number;
+  metadata?: Record<string, string>;
+  // misc
+  note?: string;
+  error?: string;
+  root_tag?: string;
+  child_count?: number;
+}
+
 // ─── Dataset Analysis types ─────────────────────────────────────────────────────
 
 export interface DatasetAnalysisResult {
@@ -340,6 +390,9 @@ export const api = {
 
   analyzeDataset: (fileId: string) =>
     post<DatasetAnalysisResult>(`/files/analyze/${fileId}`, {}),
+
+  inspectFile: (fileId: string) =>
+    get<FileInspectionResult>(`/files/inspect/${fileId}`),
 
   // Mitigation (bias reduction algorithms)
   listMitigationMethods: () =>

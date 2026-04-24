@@ -23,5 +23,8 @@ python-dotenv==1.0.1  # Load .env variables locally
 # ─── File Format Support ──────────────────────────────────────────────────────
 openpyxl==3.1.2       # Excel (.xlsx, .xls) support
 pyarrow==15.0.0       # Parquet file support
+pillow==10.3.0        # Image metadata (width/height/mode) for /files/inspect
+pypdf==4.2.0          # PDF page count + first-page text for /files/inspect
+PyYAML==6.0.1         # YAML structure inspection
 
 # Dev/test deps live in requirements-dev.txt so production images stay lean.

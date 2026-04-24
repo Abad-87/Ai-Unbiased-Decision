@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Tailwind v4: enable class-based dark mode so ThemeProvider can toggle it. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 body {
   font-family: 'Inter', system-ui, sans-serif;
 }
@@ -7,4 +10,11 @@ body {
 /* Better dark mode support */
 .dark {
   color-scheme: dark;
+}
+
+html, body {
+  background-color: #fafafa;
+}
+html.dark, html.dark body {
+  background-color: #09090b;
 }
