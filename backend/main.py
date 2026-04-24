@@ -131,16 +131,47 @@ _rate_limiter_ops = 0
 
 # ─── Lifespan ─────────────────────────────────────────────────────────────────
 
+# Global readiness flags so /health can report status without blocking.
+_READY_STATE: dict[str, object] = {
+    "models_ready": False,
+    "db_ready": False,
+    "startup_error": None,
+}
+
+
+async def _background_warmup() -> None:
+    """
+    Load ML models + ensure DB indexes AFTER the HTTP server is already bound
+    to $PORT. On Render's free tier the container is killed if the health
+    check doesn't answer quickly, so we must NOT block lifespan startup on
+    these 15–30 s operations.
+    """
+    try:
+        # preload() is sync + CPU-bound; run off the event loop so we don't
+        # starve incoming health-check requests while models deserialize.
+        await asyncio.to_thread(hiring_loader.preload)
+        await asyncio.to_thread(loan_loader.preload)
+        await asyncio.to_thread(social_loader.preload)
+        _READY_STATE["models_ready"] = True
+        logger.info("=== Models loaded ===")
+    except FileNotFoundError as exc:
+        _READY_STATE["startup_error"] = f"Model file missing: {exc}"
+        logger.error(f"Model preload failed: {exc}  Run python create_dummy_models.py")
+    except Exception as exc:  # noqa: BLE001
+        _READY_STATE["startup_error"] = f"Model preload failed: {exc}"
+        logger.exception(f"Model preload failed: {exc}")
+
+    try:
+        await ensure_indexes()
+        _READY_STATE["db_ready"] = True
+    except Exception as exc:  # noqa: BLE001
+        # Non-fatal: we fall back to JSON persistence.
+        logger.warning(f"ensure_indexes failed (continuing with JSON fallback): {exc}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("=== Quantum startup (Phase 4) ===")
-    try:
-        hiring_loader.preload()
-        loan_loader.preload()
-        social_loader.preload()
-    except FileNotFoundError as exc:
-        logger.error(f"FATAL: {exc}  Run python create_dummy_models.py")
-        raise
     if not MONGO_URL and not _RUNNING_TESTS:
         logger.warning(
             "MONGO_URL not set — persistence will use the JSON fallback "
@@ -148,10 +179,21 @@ async def lifespan(app: FastAPI):
             "production traffic. Set MONGO_URL in the Render dashboard to "
             "enable MongoDB-backed auditing."
         )
-    await ensure_indexes()
-    logger.info("=== Ready ===")
-    yield
-    logger.info("=== Shutdown ===")
+
+    # Fire-and-forget warmup so uvicorn can start accepting requests (and
+    # Render's health probe can succeed) immediately.
+    warmup_task = asyncio.create_task(_background_warmup())
+    logger.info("=== Server accepting traffic (warmup running in background) ===")
+    try:
+        yield
+    finally:
+        logger.info("=== Shutdown ===")
+        if not warmup_task.done():
+            warmup_task.cancel()
+            try:
+                await warmup_task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
 
 
 # ─── App ──────────────────────────────────────────────────────────────────────
@@ -485,31 +527,52 @@ def root():
     }
 
 
+@app.get("/livez", tags=["Platform"])
+def livez():
+    """Zero-dependency liveness probe — always 200 once the server is up."""
+    return {"status": "alive"}
+
+
 @app.get("/health", tags=["Platform"])
 def health_check():
-    from utils.shap_cache import shap_cache, ws_manager
-    from utils.logger import AUDIT_LOG_PATH
-    audit_path = AUDIT_LOG_PATH
-    return {
-        "status":    "healthy",
-        "timestamp": time.time(),
-        "version":   "4.0.0",
-        "commit":    os.getenv("RENDER_GIT_COMMIT", "dev"),
-        "models":    registry.list_models(),
-        "audit_log": {
-            "path":       str(audit_path),
-            "exists":     audit_path.exists(),
-            "size_bytes": audit_path.stat().st_size if audit_path.exists() else 0,
-        },
-        "shap_cache": {
-            "backend":        "redis+memory" if shap_cache._redis else "memory-only",
-            "ws_connections": ws_manager.connected_count(),
-        },
-        "security": {
-            "pii_masking":    os.getenv("PII_MASK_ENABLED", "true"),
-            "max_body_bytes": MAX_BODY_BYTES,
-        },
+    """
+    Always returns 200 so Render's health check passes immediately. Reports
+    readiness flags so callers can tell whether models / DB indexes finished
+    loading in the background.
+    """
+    payload = {
+        "status":         "healthy",
+        "timestamp":      time.time(),
+        "version":        "4.0.0",
+        "commit":         os.getenv("RENDER_GIT_COMMIT", "dev"),
+        "models_ready":   bool(_READY_STATE["models_ready"]),
+        "db_ready":       bool(_READY_STATE["db_ready"]),
+        "startup_error":  _READY_STATE["startup_error"],
     }
+    # Include richer info only when models have actually loaded — avoids
+    # touching uninitialised subsystems during the first seconds after boot.
+    if _READY_STATE["models_ready"]:
+        try:
+            from utils.shap_cache import shap_cache, ws_manager
+            from utils.logger import AUDIT_LOG_PATH
+            audit_path = AUDIT_LOG_PATH
+            payload["models"] = registry.list_models()
+            payload["audit_log"] = {
+                "path":       str(audit_path),
+                "exists":     audit_path.exists(),
+                "size_bytes": audit_path.stat().st_size if audit_path.exists() else 0,
+            }
+            payload["shap_cache"] = {
+                "backend":        "redis+memory" if shap_cache._redis else "memory-only",
+                "ws_connections": ws_manager.connected_count(),
+            }
+        except Exception as exc:  # noqa: BLE001
+            payload["health_detail_error"] = str(exc)
+    payload["security"] = {
+        "pii_masking":    os.getenv("PII_MASK_ENABLED", "true"),
+        "max_body_bytes": MAX_BODY_BYTES,
+    }
+    return payload
 
 
 @app.get("/models", tags=["Platform"])
