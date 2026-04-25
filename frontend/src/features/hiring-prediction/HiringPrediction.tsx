@@ -37,7 +37,7 @@ const EDUCATION_LEVELS = [
 ];
 
 export function HiringPrediction() {
-  const { profiles, lastUpdated } = useScanContext();
+  const { profiles, inferredDomains, lastUpdated } = useScanContext();
   const [formData, setFormData] = useState<HiringFormData>(INITIAL_FORM);
   const lastAutoPredictionKeyRef = useRef<string>('');
   const [isLoading, setIsLoading] = useState(false);
@@ -47,6 +47,7 @@ export function HiringPrediction() {
   const [shapLoading, setShapLoading] = useState(false);
 
   useEffect(() => {
+    if (!inferredDomains.includes('hiring')) return;
     setFormData({
       years_experience: profiles.hiring.years_experience,
       education_level: profiles.hiring.education_level,
@@ -58,9 +59,10 @@ export function HiringPrediction() {
       religion: profiles.hiring.religion,
       ethnicity: profiles.hiring.ethnicity,
     });
-  }, [profiles.hiring, lastUpdated]);
+  }, [profiles.hiring, inferredDomains, lastUpdated]);
 
   const formSyncedWithProfile = JSON.stringify(formData) === JSON.stringify(profiles.hiring);
+  const hasHiringScanData = inferredDomains.includes('hiring') && Boolean(lastUpdated);
 
   const handlePredict = useCallback(async () => {
     setIsLoading(true);
@@ -109,13 +111,13 @@ export function HiringPrediction() {
   }, [formData]);
 
   useEffect(() => {
-    if (!formSyncedWithProfile || isLoading) return;
-    const token = lastUpdated ?? 'initial';
+    if (!hasHiringScanData || !formSyncedWithProfile || isLoading || !lastUpdated) return;
+    const token = lastUpdated;
     const autoKey = `${token}:${JSON.stringify(formData)}`;
     if (lastAutoPredictionKeyRef.current === autoKey) return;
     lastAutoPredictionKeyRef.current = autoKey;
     void handlePredict();
-  }, [formData, formSyncedWithProfile, isLoading, lastUpdated, handlePredict]);
+  }, [formData, formSyncedWithProfile, hasHiringScanData, isLoading, lastUpdated, handlePredict]);
 
   const shapChartData = shapData
     ? Object.entries(shapData).map(([feature, value]) => ({
@@ -458,7 +460,9 @@ export function HiringPrediction() {
               <Briefcase className="mx-auto text-zinc-300 dark:text-zinc-700 mb-4" size={64} />
               <h3 className="text-xl font-semibold dark:text-white mb-2">No Prediction Yet</h3>
               <p className="text-zinc-500 dark:text-zinc-400">
-                Waiting for scanned profile data to auto-generate hiring insights.
+                {hasHiringScanData
+                  ? 'Waiting for analyzed hiring data to auto-generate insights.'
+                  : 'Analyze a hiring-related file first to auto-fill values and generate a prediction.'}
               </p>
             </div>
           )}

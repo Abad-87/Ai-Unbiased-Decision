@@ -503,7 +503,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
       </div>
 
       {/* Domain Selector */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         {DOMAINS.map(domain => {
           const Icon = domain.icon;
           const isActive = activeDomain === domain.id;
@@ -516,7 +516,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
                 setError(null);
                 setShapData(null);
               }}
-              className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-medium transition-all ${
+              className={`flex shrink-0 items-center gap-2 px-6 py-3 rounded-2xl font-medium transition-all ${
                 isActive
                   ? ACTIVE_TAB_CLASSES[domain.id]
                   : 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50'
@@ -532,7 +532,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Form Section */}
         <div className="lg:col-span-5">
-          <div className={`bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800`}>
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
             <h2 className="text-xl font-semibold mb-2 dark:text-white">
               {DOMAINS.find(d => d.id === activeDomain)?.label} Parameters
             </h2>
@@ -546,30 +546,32 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
             {activeDomain === 'hiring' && renderHiringForm()}
             {activeDomain === 'social' && renderSocialForm()}
 
-            {socialManualMode ? (
-              <button
-                onClick={handlePredict}
-                disabled={isLoading}
-                className="w-full mt-8 py-4 bg-violet-600 hover:bg-violet-700 disabled:bg-zinc-400 text-white font-medium rounded-2xl flex items-center justify-center gap-3 transition-all"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 size={20} className="animate-spin" />
-                    Predicting...
-                  </>
-                ) : (
-                  <>
-                    <Zap size={20} />
-                    Get Prediction
-                  </>
-                )}
-              </button>
-            ) : (
-              <div className="w-full mt-8 py-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-medium rounded-2xl flex items-center justify-center gap-3">
-                <Zap size={20} />
-                Auto prediction from scan
-              </div>
-            )}
+            <div className="mt-8">
+              {socialManualMode ? (
+                <button
+                  onClick={handlePredict}
+                  disabled={isLoading}
+                  className="w-full py-4 bg-violet-600 hover:bg-violet-700 disabled:bg-zinc-400 text-white font-medium rounded-2xl flex items-center justify-center gap-3 transition-all shadow-sm"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin" />
+                      Predicting...
+                    </>
+                  ) : (
+                    <>
+                      <Zap size={20} />
+                      Get Prediction
+                    </>
+                  )}
+                </button>
+              ) : (
+                <div className="w-full py-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-medium rounded-2xl flex items-center justify-center gap-3">
+                  <Zap size={20} />
+                  Auto prediction from scan
+                </div>
+              )}
+            </div>
 
             {error && (
               <div className="mt-4 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-2xl text-red-700 dark:text-red-300">
