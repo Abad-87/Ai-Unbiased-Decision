@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
-import { Zap, RefreshCw, AlertTriangle, Loader2, Briefcase, DollarSign, Share2, Eye } from 'lucide-react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { Zap, AlertTriangle, Loader2, Briefcase, DollarSign, Share2, Eye } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { api } from '../../lib/api';
 import type { HiringResponse, LoanResponse, SocialResponse } from '../../lib/api';
@@ -111,9 +111,14 @@ const EDUCATION_LEVELS = [
 
 const LOAN_TERMS = [6, 12, 18, 24, 30, 36, 48, 60, 84, 120, 180, 240, 360];
 
-export function FairnessExplorer() {
+interface FairnessExplorerProps {
+  autoRunToken?: number;
+}
+
+export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
   const { profiles, inferredDomains, lastUpdated } = useScanContext();
   const [activeDomain, setActiveDomain] = useState<Domain>('loan');
+  const lastAutoPredictionKeyRef = useRef<string>('');
   
   // Form states
   const [loanForm, setLoanForm] = useState<LoanForm>(DEFAULT_LOAN_FORM);
@@ -130,10 +135,16 @@ export function FairnessExplorer() {
     setLoanForm(profiles.loan);
     setHiringForm(profiles.hiring);
     setSocialForm(profiles.social);
-    if (inferredDomains.length === 1) {
+    if (inferredDomains.length > 0) {
       setActiveDomain(inferredDomains[0]);
     }
   }, [profiles, inferredDomains, lastUpdated]);
+
+  const formsSyncedWithProfiles =
+    JSON.stringify(loanForm) === JSON.stringify(profiles.loan) &&
+    JSON.stringify(hiringForm) === JSON.stringify(profiles.hiring) &&
+    JSON.stringify(socialForm) === JSON.stringify(profiles.social);
+  const preferredAutoDomain = inferredDomains.length > 0 ? inferredDomains[0] : activeDomain;
 
   // Fetch SHAP when result changes
   useEffect(() => {
@@ -227,22 +238,14 @@ export function FairnessExplorer() {
     }
   }, [activeDomain, loanForm, hiringForm, socialForm]);
 
-  const resetForm = () => {
-    switch (activeDomain) {
-      case 'loan':
-        setLoanForm(DEFAULT_LOAN_FORM);
-        break;
-      case 'hiring':
-        setHiringForm(DEFAULT_HIRING_FORM);
-        break;
-      case 'social':
-        setSocialForm(DEFAULT_SOCIAL_FORM);
-        break;
-    }
-    setResult(null);
-    setError(null);
-    setShapData(null);
-  };
+  useEffect(() => {
+    if (!autoRunToken || !lastUpdated || !formsSyncedWithProfiles || isLoading) return;
+    if (activeDomain !== preferredAutoDomain) return;
+    const autoKey = `${autoRunToken}:${lastUpdated}:${activeDomain}`;
+    if (lastAutoPredictionKeyRef.current === autoKey) return;
+    lastAutoPredictionKeyRef.current = autoKey;
+    void handlePredict();
+  }, [autoRunToken, lastUpdated, formsSyncedWithProfiles, isLoading, activeDomain, preferredAutoDomain, handlePredict]);
 
   const getResultLabel = () => {
     if (!result) return '';
@@ -264,7 +267,7 @@ export function FairnessExplorer() {
     : [];
 
   const renderLoanForm = () => (
-    <div className="space-y-5">
+    <fieldset disabled className="space-y-5 opacity-80 pointer-events-none">
       <div>
         <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Credit Score</label>
         <div className="flex items-center gap-4">
@@ -323,11 +326,11 @@ export function FairnessExplorer() {
             className="w-full bg-zinc-100 dark:bg-zinc-800 border border-transparent focus:border-emerald-500 rounded-xl px-4 py-3 dark:text-white" />
         </div>
       </div>
-    </div>
+    </fieldset>
   );
 
   const renderHiringForm = () => (
-    <div className="space-y-5">
+    <fieldset disabled className="space-y-5 opacity-80 pointer-events-none">
       <div>
         <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Years of Experience</label>
         <div className="flex items-center gap-4">
@@ -375,11 +378,11 @@ export function FairnessExplorer() {
             className="w-full bg-zinc-100 dark:bg-zinc-800 border border-transparent focus:border-blue-500 rounded-xl px-4 py-3 dark:text-white" />
         </div>
       </div>
-    </div>
+    </fieldset>
   );
 
   const renderSocialForm = () => (
-    <div className="space-y-5">
+    <fieldset disabled className="space-y-5 opacity-80 pointer-events-none">
       <div>
         <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Avg Session Minutes</label>
         <div className="flex items-center gap-4">
@@ -421,7 +424,7 @@ export function FairnessExplorer() {
             className="w-full bg-zinc-100 dark:bg-zinc-800 border border-transparent focus:border-violet-500 rounded-xl px-4 py-3 dark:text-white" />
         </div>
       </div>
-    </div>
+    </fieldset>
   );
 
   const activeColor = DOMAINS.find(d => d.id === activeDomain)?.color || 'emerald';
@@ -439,11 +442,9 @@ export function FairnessExplorer() {
             What-If Analysis • Test predictions across all domains
           </p>
         </div>
-        <button onClick={resetForm}
-          className="flex items-center gap-2 px-6 py-3 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-2xl font-medium">
-          <RefreshCw size={18} />
-          Reset
-        </button>
+        <div className="px-4 py-2 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-600 dark:text-zinc-300">
+          Auto profile mode
+        </div>
       </div>
 
       {/* Domain Selector */}
@@ -477,9 +478,12 @@ export function FairnessExplorer() {
         {/* Form Section */}
         <div className="lg:col-span-5">
           <div className={`bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800`}>
-            <h2 className="text-xl font-semibold mb-6 dark:text-white">
+            <h2 className="text-xl font-semibold mb-2 dark:text-white">
               {DOMAINS.find(d => d.id === activeDomain)?.label} Parameters
             </h2>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">
+              Parameters are auto-filled from scanned files and locked to keep analysis consistent.
+            </p>
             
             {activeDomain === 'loan' && renderLoanForm()}
             {activeDomain === 'hiring' && renderHiringForm()}

@@ -141,16 +141,50 @@ function mergeRecord<T extends Record<string, unknown>>(base: T, patch: Record<s
   return next;
 }
 
+const RATE_FIELDS = new Set(['like_rate', 'share_rate', 'comment_rate']);
+const INTEGER_FIELDS = new Set([
+  'education_level',
+  'num_past_jobs',
+  'certifications',
+  'credit_score',
+  'loan_term_months',
+  'num_credit_lines',
+  'topics_interacted',
+  'account_age_days',
+]);
+
 function normalizeSuggestedValue(key: string, value: string | number): string | number {
-  if (typeof value === 'number') return value;
-  if (['like_rate', 'share_rate', 'comment_rate'].includes(key)) {
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) {
-      return numeric > 1 ? numeric / 100 : numeric;
+  let normalized: string | number = value;
+
+  if (typeof normalized === 'string') {
+    const trimmed = normalized.trim();
+    const numeric = Number(trimmed);
+    if (trimmed !== '' && Number.isFinite(numeric)) {
+      normalized = numeric;
+    } else {
+      return normalized;
     }
   }
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && String(value).trim() !== '' ? numeric : value;
+
+  if (RATE_FIELDS.has(key)) {
+    normalized = normalized > 1 ? normalized / 100 : normalized;
+  }
+
+  if (INTEGER_FIELDS.has(key)) {
+    normalized = Math.round(normalized);
+  }
+
+  return normalized;
+}
+
+function normalizeProfile<T extends Record<string, unknown>>(profile: T): T {
+  const next = { ...profile } as Record<string, unknown>;
+  for (const [key, value] of Object.entries(next)) {
+    if (typeof value === 'string' || typeof value === 'number') {
+      next[key] = normalizeSuggestedValue(key, value);
+    }
+  }
+  return next as T;
 }
 
 function loadInitialState(): ScanState {
@@ -163,9 +197,9 @@ function loadInitialState(): ScanState {
       ...DEFAULT_STATE,
       ...parsed,
       profiles: {
-        loan: { ...DEFAULT_LOAN, ...(parsed.profiles?.loan ?? {}) },
-        hiring: { ...DEFAULT_HIRING, ...(parsed.profiles?.hiring ?? {}) },
-        social: { ...DEFAULT_SOCIAL, ...(parsed.profiles?.social ?? {}) },
+        loan: normalizeProfile({ ...DEFAULT_LOAN, ...(parsed.profiles?.loan ?? {}) }),
+        hiring: normalizeProfile({ ...DEFAULT_HIRING, ...(parsed.profiles?.hiring ?? {}) }),
+        social: normalizeProfile({ ...DEFAULT_SOCIAL, ...(parsed.profiles?.social ?? {}) }),
       },
     };
   } catch {

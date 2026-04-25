@@ -28,14 +28,22 @@ function App() {
   // and auto-scans every uploaded file + analyzes datasets without manual setup.
   const [scanTrigger, setScanTrigger] = useState(0);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
+  const [scanStartedFromNavbar, setScanStartedFromNavbar] = useState(false);
+  const [fairnessAutoRunToken, setFairnessAutoRunToken] = useState(0);
 
   const handleNewScan = () => {
+    setScanStartedFromNavbar(true);
     setActivePage('datasets');
     setScanTrigger((n) => n + 1);
   };
 
   const handleScanComplete = () => {
     setDataRefreshKey((n) => n + 1);
+    if (scanStartedFromNavbar) {
+      setActivePage('fairness-explorer');
+      setFairnessAutoRunToken((n) => n + 1);
+      setScanStartedFromNavbar(false);
+    }
   };
 
   const renderPage = () => {
@@ -47,7 +55,7 @@ function App() {
       case 'bias-detection':
         return <BiasDetection refreshKey={dataRefreshKey} onScanComplete={handleScanComplete} />;
       case 'fairness-explorer':
-        return <FairnessExplorer />;
+        return <FairnessExplorer autoRunToken={fairnessAutoRunToken} />;
       case 'mitigation-lab':
         return <MitigationLab />;
       case 'reports':
