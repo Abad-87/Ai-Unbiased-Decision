@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Briefcase, AlertTriangle, CheckCircle, XCircle, Loader2, Eye } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { api } from '../../lib/api';
@@ -39,6 +39,7 @@ const EDUCATION_LEVELS = [
 export function HiringPrediction() {
   const { profiles, lastUpdated } = useScanContext();
   const [formData, setFormData] = useState<HiringFormData>(INITIAL_FORM);
+  const lastAutoPredictionKeyRef = useRef<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<HiringResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,13 +60,9 @@ export function HiringPrediction() {
     });
   }, [profiles.hiring, lastUpdated]);
 
-  const handleInputChange = (field: keyof HiringFormData, value: string | number) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    setResult(null);
-    setShapData(null);
-  };
+  const formSyncedWithProfile = JSON.stringify(formData) === JSON.stringify(profiles.hiring);
 
-  const handlePredict = async () => {
+  const handlePredict = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     setResult(null);
@@ -109,14 +106,16 @@ export function HiringPrediction() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [formData]);
 
-  const resetForm = () => {
-    setFormData(INITIAL_FORM);
-    setResult(null);
-    setError(null);
-    setShapData(null);
-  };
+  useEffect(() => {
+    if (!formSyncedWithProfile || isLoading) return;
+    const token = lastUpdated ?? 'initial';
+    const autoKey = `${token}:${JSON.stringify(formData)}`;
+    if (lastAutoPredictionKeyRef.current === autoKey) return;
+    lastAutoPredictionKeyRef.current = autoKey;
+    void handlePredict();
+  }, [formData, formSyncedWithProfile, isLoading, lastUpdated, handlePredict]);
 
   const shapChartData = shapData
     ? Object.entries(shapData).map(([feature, value]) => ({
@@ -139,12 +138,9 @@ export function HiringPrediction() {
             Predict candidate hiring decisions with fairness monitoring
           </p>
         </div>
-        <button
-          onClick={resetForm}
-          className="px-6 py-3 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-2xl font-medium transition-all"
-        >
-          Reset Form
-        </button>
+        <div className="px-4 py-2 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-600 dark:text-zinc-300">
+          Auto profile mode
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -153,7 +149,7 @@ export function HiringPrediction() {
           <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
             <h2 className="text-xl font-semibold mb-6 dark:text-white">Candidate Information</h2>
 
-            <div className="space-y-5">
+            <fieldset disabled className="space-y-5 opacity-80 pointer-events-none">
               {/* Years Experience */}
               <div>
                 <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">
@@ -166,7 +162,6 @@ export function HiringPrediction() {
                     max="50"
                     step="0.5"
                     value={formData.years_experience}
-                    onChange={(e) => handleInputChange('years_experience', parseFloat(e.target.value))}
                     className="flex-1 accent-emerald-600"
                   />
                   <span className="w-16 text-right font-medium dark:text-white">
@@ -182,7 +177,6 @@ export function HiringPrediction() {
                 </label>
                 <select
                   value={formData.education_level}
-                  onChange={(e) => handleInputChange('education_level', parseInt(e.target.value))}
                   className="w-full bg-zinc-100 dark:bg-zinc-800 border border-transparent focus:border-emerald-500 rounded-xl px-4 py-3 dark:text-white"
                 >
                   {EDUCATION_LEVELS.map(level => (
@@ -203,7 +197,6 @@ export function HiringPrediction() {
                     max="100"
                     step="1"
                     value={formData.technical_score}
-                    onChange={(e) => handleInputChange('technical_score', parseInt(e.target.value))}
                     className="flex-1 accent-emerald-600"
                   />
                   <span className="w-16 text-right font-medium dark:text-white">
@@ -224,7 +217,6 @@ export function HiringPrediction() {
                     max="100"
                     step="1"
                     value={formData.communication_score}
-                    onChange={(e) => handleInputChange('communication_score', parseInt(e.target.value))}
                     className="flex-1 accent-emerald-600"
                   />
                   <span className="w-16 text-right font-medium dark:text-white">
@@ -245,7 +237,6 @@ export function HiringPrediction() {
                     max="30"
                     step="1"
                     value={formData.num_past_jobs}
-                    onChange={(e) => handleInputChange('num_past_jobs', parseInt(e.target.value))}
                     className="flex-1 accent-emerald-600"
                   />
                   <span className="w-16 text-right font-medium dark:text-white">
@@ -266,7 +257,6 @@ export function HiringPrediction() {
                     max="20"
                     step="1"
                     value={formData.certifications}
-                    onChange={(e) => handleInputChange('certifications', parseInt(e.target.value))}
                     className="flex-1 accent-emerald-600"
                   />
                   <span className="w-16 text-right font-medium dark:text-white">
@@ -274,7 +264,7 @@ export function HiringPrediction() {
                   </span>
                 </div>
               </div>
-            </div>
+            </fieldset>
           </div>
 
           {/* Protected Attributes */}
@@ -287,13 +277,12 @@ export function HiringPrediction() {
               Used for fairness monitoring only. Not used in prediction.
             </p>
 
-            <div className="space-y-4">
+            <fieldset disabled className="space-y-4 opacity-80 pointer-events-none">
               <div>
                 <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Gender</label>
                 <input
                   type="text"
                   value={formData.gender}
-                  onChange={(e) => handleInputChange('gender', e.target.value)}
                   placeholder="e.g., male, female, non-binary"
                   className="w-full bg-zinc-100 dark:bg-zinc-800 border border-transparent focus:border-emerald-500 rounded-xl px-4 py-3 dark:text-white"
                 />
@@ -303,7 +292,6 @@ export function HiringPrediction() {
                 <input
                   type="text"
                   value={formData.religion}
-                  onChange={(e) => handleInputChange('religion', e.target.value)}
                   placeholder="e.g., christian, muslim, hindu"
                   className="w-full bg-zinc-100 dark:bg-zinc-800 border border-transparent focus:border-emerald-500 rounded-xl px-4 py-3 dark:text-white"
                 />
@@ -313,32 +301,26 @@ export function HiringPrediction() {
                 <input
                   type="text"
                   value={formData.ethnicity}
-                  onChange={(e) => handleInputChange('ethnicity', e.target.value)}
                   placeholder="e.g., asian, caucasian, african"
                   className="w-full bg-zinc-100 dark:bg-zinc-800 border border-transparent focus:border-emerald-500 rounded-xl px-4 py-3 dark:text-white"
                 />
               </div>
-            </div>
+            </fieldset>
           </div>
 
-          {/* Predict Button */}
-          <button
-            onClick={handlePredict}
-            disabled={isLoading}
-            className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-medium rounded-2xl flex items-center justify-center gap-3 transition-all"
-          >
+          <div className="w-full py-4 bg-emerald-600 text-white font-medium rounded-2xl flex items-center justify-center gap-3">
             {isLoading ? (
               <>
                 <Loader2 size={20} className="animate-spin" />
-                Analyzing Candidate...
+                Analyzing Candidate Automatically...
               </>
             ) : (
               <>
                 <Briefcase size={20} />
-                Predict Hiring Decision
+                Insights Auto-Generated From Scan
               </>
             )}
-          </button>
+          </div>
 
           {error && (
             <div className="p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-2xl text-red-700 dark:text-red-300">
@@ -476,7 +458,7 @@ export function HiringPrediction() {
               <Briefcase className="mx-auto text-zinc-300 dark:text-zinc-700 mb-4" size={64} />
               <h3 className="text-xl font-semibold dark:text-white mb-2">No Prediction Yet</h3>
               <p className="text-zinc-500 dark:text-zinc-400">
-                Fill in the candidate information and click "Predict Hiring Decision"
+                Waiting for scanned profile data to auto-generate hiring insights.
               </p>
             </div>
           )}

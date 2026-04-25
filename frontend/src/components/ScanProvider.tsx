@@ -142,6 +142,7 @@ function mergeRecord<T extends Record<string, unknown>>(base: T, patch: Record<s
 }
 
 const RATE_FIELDS = new Set(['like_rate', 'share_rate', 'comment_rate']);
+const VALID_LOAN_TERMS = [6, 12, 18, 24, 30, 36, 48, 60, 84, 120, 180, 240, 360];
 const INTEGER_FIELDS = new Set([
   'education_level',
   'num_past_jobs',
@@ -172,6 +173,14 @@ function normalizeSuggestedValue(key: string, value: string | number): string | 
 
   if (INTEGER_FIELDS.has(key)) {
     normalized = Math.round(normalized);
+  }
+
+  if (key === 'loan_term_months') {
+    normalized = VALID_LOAN_TERMS.reduce((best, term) => {
+      const bestDiff = Math.abs(best - normalized);
+      const nextDiff = Math.abs(term - normalized);
+      return nextDiff < bestDiff ? term : best;
+    }, VALID_LOAN_TERMS[0]);
   }
 
   return normalized;
