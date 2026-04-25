@@ -12,14 +12,31 @@ interface DomainConfig {
   id: Domain;
   label: string;
   icon: typeof DollarSign;
-  color: string;
 }
 
 const DOMAINS: DomainConfig[] = [
-  { id: 'loan', label: 'Loan Approval', icon: DollarSign, color: 'emerald' },
-  { id: 'hiring', label: 'Hiring Decision', icon: Briefcase, color: 'blue' },
-  { id: 'social', label: 'Social Recommend', icon: Share2, color: 'violet' },
+  { id: 'loan', label: 'Loan Approval', icon: DollarSign },
+  { id: 'hiring', label: 'Hiring Decision', icon: Briefcase },
+  { id: 'social', label: 'Social Recommend', icon: Share2 },
 ];
+
+const ACTIVE_TAB_CLASSES: Record<Domain, string> = {
+  loan: 'bg-emerald-600 text-white',
+  hiring: 'bg-blue-600 text-white',
+  social: 'bg-violet-600 text-white',
+};
+
+const RESULT_BORDER_CLASSES: Record<Domain, string> = {
+  loan: 'border-emerald-200 bg-white dark:bg-zinc-900 dark:border-emerald-800',
+  hiring: 'border-blue-200 bg-white dark:bg-zinc-900 dark:border-blue-800',
+  social: 'border-violet-200 bg-white dark:bg-zinc-900 dark:border-violet-800',
+};
+
+const RESULT_TEXT_CLASSES: Record<Domain, string> = {
+  loan: 'text-emerald-600',
+  hiring: 'text-blue-600',
+  social: 'text-violet-600',
+};
 
 // Loan form state
 interface LoanForm {
@@ -139,6 +156,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
   const [error, setError] = useState<string | null>(null);
   const [shapData, setShapData] = useState<Record<string, number> | null>(null);
   const [shapLoading, setShapLoading] = useState(false);
+  const socialManualMode = activeDomain === 'social';
 
   useEffect(() => {
     setLoanForm(profiles.loan);
@@ -248,13 +266,43 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
   }, [activeDomain, loanForm, hiringForm, socialForm]);
 
   useEffect(() => {
-    if (!autoRunToken || !lastUpdated || !formsSyncedWithProfiles || isLoading) return;
-    if (activeDomain !== preferredAutoDomain) return;
-    const autoKey = `${autoRunToken}:${lastUpdated}:${activeDomain}`;
+    if (!formsSyncedWithProfiles || isLoading) return;
+
+    // Loan/Hiring should always auto-process from scanned profile state.
+    // Social remains manual unless explicitly triggered by a New Scan flow.
+    const shouldAutoRun =
+      activeDomain === 'social'
+        ? Boolean(autoRunToken && lastUpdated && activeDomain === preferredAutoDomain)
+        : Boolean(lastUpdated);
+    if (!shouldAutoRun) return;
+
+    const triggerSeed =
+      activeDomain === 'social'
+        ? `${autoRunToken}:${lastUpdated}`
+        : `${lastUpdated}`;
+    const activeProfileSignature = JSON.stringify(
+      activeDomain === 'loan'
+        ? profiles.loan
+        : activeDomain === 'hiring'
+          ? profiles.hiring
+          : profiles.social
+    );
+    const autoKey = `${triggerSeed}:${activeDomain}:${activeProfileSignature}`;
     if (lastAutoPredictionKeyRef.current === autoKey) return;
     lastAutoPredictionKeyRef.current = autoKey;
     void handlePredict();
-  }, [autoRunToken, lastUpdated, formsSyncedWithProfiles, isLoading, activeDomain, preferredAutoDomain, handlePredict]);
+  }, [
+    autoRunToken,
+    lastUpdated,
+    formsSyncedWithProfiles,
+    isLoading,
+    activeDomain,
+    preferredAutoDomain,
+    profiles.loan,
+    profiles.hiring,
+    profiles.social,
+    handlePredict,
+  ]);
 
   const getResultLabel = () => {
     if (!result) return '';
@@ -391,7 +439,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
   );
 
   const renderSocialForm = () => (
-    <fieldset disabled className="space-y-5 opacity-80 pointer-events-none">
+    <fieldset disabled={!socialManualMode} className={`space-y-5 ${socialManualMode ? '' : 'opacity-80 pointer-events-none'}`}>
       <div>
         <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Avg Session Minutes</label>
         <div className="flex items-center gap-4">
@@ -436,8 +484,6 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
     </fieldset>
   );
 
-  const activeColor = DOMAINS.find(d => d.id === activeDomain)?.color || 'emerald';
-
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       {/* Header */}
@@ -452,7 +498,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
           </p>
         </div>
         <div className="px-4 py-2 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-600 dark:text-zinc-300">
-          Auto profile mode
+          {socialManualMode ? 'Manual mode (Social only)' : 'Auto profile mode'}
         </div>
       </div>
 
@@ -472,7 +518,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
               }}
               className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-medium transition-all ${
                 isActive
-                  ? `bg-${domain.color}-600 text-white`
+                  ? ACTIVE_TAB_CLASSES[domain.id]
                   : 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50'
               }`}
             >
@@ -491,30 +537,39 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
               {DOMAINS.find(d => d.id === activeDomain)?.label} Parameters
             </h2>
             <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">
-              Parameters are auto-filled from scanned files and locked to keep analysis consistent.
+              {socialManualMode
+                ? 'You can manually edit Social Recommendation parameters and run prediction.'
+                : 'Parameters are auto-filled from scanned files and locked to keep analysis consistent.'}
             </p>
             
             {activeDomain === 'loan' && renderLoanForm()}
             {activeDomain === 'hiring' && renderHiringForm()}
             {activeDomain === 'social' && renderSocialForm()}
 
-            <button
-              onClick={handlePredict}
-              disabled={isLoading}
-              className={`w-full mt-8 py-4 bg-${activeColor}-600 hover:bg-${activeColor}-700 disabled:bg-zinc-400 text-white font-medium rounded-2xl flex items-center justify-center gap-3 transition-all`}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" />
-                  Predicting...
-                </>
-              ) : (
-                <>
-                  <Zap size={20} />
-                  Get Prediction
-                </>
-              )}
-            </button>
+            {socialManualMode ? (
+              <button
+                onClick={handlePredict}
+                disabled={isLoading}
+                className="w-full mt-8 py-4 bg-violet-600 hover:bg-violet-700 disabled:bg-zinc-400 text-white font-medium rounded-2xl flex items-center justify-center gap-3 transition-all"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" />
+                    Predicting...
+                  </>
+                ) : (
+                  <>
+                    <Zap size={20} />
+                    Get Prediction
+                  </>
+                )}
+              </button>
+            ) : (
+              <div className="w-full mt-8 py-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-medium rounded-2xl flex items-center justify-center gap-3">
+                <Zap size={20} />
+                Auto prediction from scan
+              </div>
+            )}
 
             {error && (
               <div className="mt-4 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-2xl text-red-700 dark:text-red-300">
@@ -535,7 +590,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
               <div className={`rounded-3xl p-8 border-2 ${
                 result.bias_risk?.flag_for_review 
                   ? 'border-red-300 bg-red-50 dark:bg-red-950 dark:border-red-800' 
-                  : `border-${activeColor}-200 bg-white dark:bg-zinc-900 dark:border-${activeColor}-800`
+                  : RESULT_BORDER_CLASSES[activeDomain]
               }`}>
                 <div className="flex items-start justify-between mb-6">
                   <div>
@@ -553,7 +608,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
                 </div>
 
                 <div className="text-center py-8">
-                  <div className={`text-5xl font-bold mb-4 text-${activeColor}-600`}>
+                  <div className={`text-5xl font-bold mb-4 ${RESULT_TEXT_CLASSES[activeDomain]}`}>
                     {getResultLabel()}
                   </div>
                   <div className="text-3xl font-semibold dark:text-white">
@@ -598,7 +653,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
               ) : shapChartData.length > 0 ? (
                 <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
                   <div className="flex items-center gap-3 mb-6">
-                    <Eye className={`text-${activeColor}-600`} size={24} />
+                    <Eye className={RESULT_TEXT_CLASSES[activeDomain]} size={24} />
                     <h2 className="text-xl font-semibold dark:text-white">Feature Importance (SHAP)</h2>
                   </div>
                   <ResponsiveContainer width="100%" height={300}>
@@ -624,7 +679,9 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
               <Zap className="mx-auto text-zinc-300 dark:text-zinc-700 mb-4" size={64} />
               <h3 className="text-xl font-semibold dark:text-white mb-2">No Prediction Yet</h3>
               <p className="text-zinc-500 dark:text-zinc-400">
-                Adjust the parameters and click "Get Prediction" to see results
+                {socialManualMode
+                  ? 'Adjust the Social Recommendation parameters and click "Get Prediction".'
+                  : 'Scan data to auto-generate predictions for this domain.'}
               </p>
             </div>
           )}

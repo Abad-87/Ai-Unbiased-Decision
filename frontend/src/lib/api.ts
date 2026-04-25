@@ -50,6 +50,29 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+const VALID_LOAN_TERMS = [6, 12, 18, 24, 30, 36, 48, 60, 84, 120, 180, 240, 360];
+
+function normalizeLoanTermMonths(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const rounded = Math.round(value);
+    return VALID_LOAN_TERMS.reduce((best, term) => {
+      const bestDiff = Math.abs(best - rounded);
+      const nextDiff = Math.abs(term - rounded);
+      return nextDiff < bestDiff ? term : best;
+    }, VALID_LOAN_TERMS[0]);
+  }
+
+  if (typeof value === "string") {
+    const extracted = value.match(/-?\d+(?:\.\d+)?/);
+    const parsed = Number(extracted ? extracted[0] : value.trim());
+    if (Number.isFinite(parsed)) {
+      return normalizeLoanTermMonths(parsed);
+    }
+  }
+
+  return 36;
+}
+
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
 export interface BiasRisk {
@@ -403,7 +426,10 @@ export const api = {
     post<HiringResponse>("/hiring/predict", body),
 
   predictLoan: (body: LoanRequest) =>
-    post<LoanResponse>("/loan/predict", body),
+    post<LoanResponse>("/loan/predict", {
+      ...body,
+      loan_term_months: normalizeLoanTermMonths((body as Record<string, unknown>).loan_term_months),
+    }),
 
   predictSocial: (body: SocialRequest) =>
     post<SocialResponse>("/social/recommend", body),
