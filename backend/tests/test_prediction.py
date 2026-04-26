@@ -451,8 +451,13 @@ class TestExplainabilityFormat:
     ])
     def test_loan_explanation_keyword(self, prediction, expected_keyword):
         m = MagicMock()
-        m.predict       = MagicMock(return_value=np.array([prediction]))
-        m.predict_proba = MagicMock(return_value=np.array([[0.6, 0.4]]))
+        m.predict = MagicMock(return_value=np.array([prediction]))
+        # Return probabilities that align with the prediction so
+        # _balanced_binary_decision does not flip the result.
+        if prediction == 1:
+            m.predict_proba = MagicMock(return_value=np.array([[0.3, 0.7]]))
+        else:
+            m.predict_proba = MagicMock(return_value=np.array([[0.7, 0.3]]))
         result = l_pred.predict(m, LOAN_FEATURES)
         assert expected_keyword in result["explanation"].lower()
 

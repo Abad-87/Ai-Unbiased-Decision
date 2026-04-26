@@ -40,6 +40,8 @@ if str(ROOT) not in sys.path:
 os.environ.setdefault("PII_MASK_ENABLED", "false")
 # ── Relax rate limiting during tests (batch/performance tests expect no 429) ──
 os.environ.setdefault("RATE_LIMIT_MAX_REQUESTS", "5000")
+# ── Lower body-size limit so oversized-body test can trigger 413 ─────────────
+os.environ["MAX_BODY_BYTES"] = "50000"
 # ── Point to a scratch log dir so tests never write to repo logs/ ────────────
 _TMP_LOGS = tempfile.mkdtemp(prefix="quantum_test_logs_")
 os.environ.setdefault("AUDIT_LOG_DIR", _TMP_LOGS)
