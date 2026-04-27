@@ -147,6 +147,7 @@ function mergeRecord<T extends Record<string, unknown>>(base: T, patch: Record<s
 
 const RATE_FIELDS = new Set(['like_rate', 'share_rate', 'comment_rate']);
 const VALID_LOAN_TERMS = [6, 12, 18, 24, 30, 36, 48, 60, 84, 120, 180, 240, 360];
+const AGE_GROUP_RE = /^\d{1,3}(?:-\d{1,3}|\+)$/;
 const INTEGER_FIELDS = new Set([
   'education_level',
   'num_past_jobs',
@@ -158,7 +159,35 @@ const INTEGER_FIELDS = new Set([
   'account_age_days',
 ]);
 
+function toAgeGroupBucket(value: string | number): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (value < 18) return '0-17';
+    if (value < 25) return '18-24';
+    if (value < 35) return '25-34';
+    if (value < 45) return '35-44';
+    if (value < 55) return '45-54';
+    if (value < 65) return '55-64';
+    return '65+';
+  }
+
+  if (typeof value !== 'string') return '';
+
+  const trimmed = value.trim();
+  const compact = trimmed.replace(/\s+/g, '');
+  if (AGE_GROUP_RE.test(compact)) return compact;
+
+  const extracted = trimmed.match(/-?\d+(?:\.\d+)?/);
+  const numeric = Number(extracted ? extracted[0] : trimmed);
+  if (Number.isFinite(numeric)) return toAgeGroupBucket(numeric);
+
+  return trimmed;
+}
+
 function normalizeSuggestedValue(key: string, value: string | number): string | number {
+  if (key === 'age_group') {
+    return toAgeGroupBucket(value);
+  }
+
   if (typeof value === 'string') {
     const trimmed = value.trim();
     const extracted = trimmed.match(/-?\d+(?:\.\d+)?/);
