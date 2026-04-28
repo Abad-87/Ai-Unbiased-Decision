@@ -1,0 +1,3 @@
+﻿applicant_uid,monthly_stable_income,credit_history_score,debt_to_income_ratio,employment_stability_years,existing_loan_count,collateral_valuation_amount,requested_loan_tenure,payment_default_history,verified_identity_flag,residential_status_stability,bank_statement_analysis_score,is_eligible_for_loan
+L201,8200,760,0.22,7,0,46000,48,0,1,1,90,1
+L202,5000,645,0.49,3,2,21000,60,0,1,1,68,0
