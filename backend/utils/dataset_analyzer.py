@@ -37,6 +37,95 @@ from .database import save_prediction
 
 logger = logging.getLogger("dataset_analyzer")
 
+INVALID_DATA_MESSAGE = (
+    "Invalid Data: The uploaded file does not contain relevant domain attributes for Hiring, Loan, or Social analysis."
+)
+SUPPORTED_DECISION_DOMAINS = {"hiring", "loan", "social"}
+
+SCAN_RESTRICTION_PROFILES: Dict[str, List[str]] = {
+    "job_eligibility_dataset": [
+        "candidate_id",
+        "full_name",
+        "degree_specialization",
+        "cgpa_percentage",
+        "years_of_experience",
+        "technical_skills_list",
+        "dbms_proficiency_level",
+        "ai_ml_frameworks_known",
+        "projects_github_count",
+        "certification_validity_score",
+        "last_job_role",
+        "expected_salary_range",
+        "is_legitimate_candidate",
+    ],
+    "social_media_authenticity_dataset": [
+        "creator_handle",
+        "platform_type",
+        "follower_count",
+        "average_engagement_rate",
+        "reach_to_follower_ratio",
+        "bot_detection_index",
+        "comment_authenticity_score",
+        "sponsorship_history_count",
+        "audience_demographics_match",
+        "content_consistency_score",
+        "video_view_to_like_ratio",
+        "account_creation_age_months",
+        "is_legit_influencer",
+    ],
+    "loan_approval_risk_dataset": [
+        "applicant_uid",
+        "monthly_stable_income",
+        "credit_history_score",
+        "debt_to_income_ratio",
+        "employment_stability_years",
+        "existing_loan_count",
+        "collateral_valuation_amount",
+        "requested_loan_tenure",
+        "payment_default_history",
+        "verified_identity_flag",
+        "residential_status_stability",
+        "bank_statement_analysis_score",
+        "is_eligible_for_loan",
+    ],
+}
+
+PROFILE_DOMAIN_MAP: Dict[str, str] = {
+    "job_eligibility_dataset": "hiring",
+    "social_media_authenticity_dataset": "social",
+    "loan_approval_risk_dataset": "loan",
+}
+
+PROFILE_CANONICAL_COLUMN_MAP: Dict[str, Dict[str, str]] = {
+    "job_eligibility_dataset": {
+        "years_experience": "years_of_experience",
+        "education_level": "degree_specialization",
+        "technical_score": "dbms_proficiency_level",
+        "communication_score": "certification_validity_score",
+        "num_past_jobs": "projects_github_count",
+    },
+    "loan_approval_risk_dataset": {
+        "credit_score": "credit_history_score",
+        "annual_income": "monthly_stable_income",
+        "loan_amount": "collateral_valuation_amount",
+        "loan_term_months": "requested_loan_tenure",
+        "employment_years": "employment_stability_years",
+        "existing_debt": "debt_to_income_ratio",
+        "num_credit_lines": "existing_loan_count",
+    },
+    "social_media_authenticity_dataset": {
+        "avg_session_minutes": "average_engagement_rate",
+        "posts_per_day": "sponsorship_history_count",
+        "topics_interacted": "content_consistency_score",
+        "like_rate": "average_engagement_rate",
+        "share_rate": "reach_to_follower_ratio",
+        "comment_rate": "comment_authenticity_score",
+        "account_age_days": "account_creation_age_months",
+    },
+}
+
+SCAN_PROFILE_MIN_MATCH_RATIO = 0.75
+
 
 DOMAIN_SIGNATURES: Dict[str, Dict[str, List[str]]] = {
     "hiring": {
@@ -156,7 +245,7 @@ def read_tabular_file(file_path: Path, extension: str) -> pd.DataFrame:
         return pd.read_excel(file_path)
     if extension == ".json":
         try:
-            raw = json.loads(file_path.read_text(encoding="utf-8", errors="replace"))
+            raw = json.loads(file_path.read_text(encoding="utf-8-sig", errors="replace"))
             if isinstance(raw, list):
                 return pd.DataFrame(raw)
             if isinstance(raw, dict):
@@ -190,6 +279,8 @@ def detect_domain(df: pd.DataFrame) -> Tuple[Optional[str], float, Dict[str, str
     best_mapping: Dict[str, str] = {}
 
     for domain, schema in DOMAIN_SIGNATURES.items():
+        if domain not in SUPPORTED_DECISION_DOMAINS:
+            continue
         required = list(schema["required"])
         optional = list(schema["optional"])
         required_matches = 0
@@ -242,6 +333,235 @@ def _find_matching_column(columns: List[str], candidates: List[str]) -> Optional
         if norm in normalized:
             return normalized[norm]
     return None
+
+
+def _invalid_data_response(file_id: str, rows_total: int = 0) -> Dict[str, Any]:
+    return {
+        "success": False,
+        "file_id": file_id,
+        "error": INVALID_DATA_MESSAGE,
+        "detected_domain": None,
+        "confidence": 0.0,
+        "rows_total": int(rows_total),
+        "rows_predicted": 0,
+        "rows_failed": 0,
+        "errors": [],
+    }
+
+
+def get_domain_attribute_profiles() -> Dict[str, List[str]]:
+    """Return the strict upload attributes required for each supported domain."""
+    return {
+        domain: list(SCAN_RESTRICTION_PROFILES[profile_name])
+        for profile_name, domain in PROFILE_DOMAIN_MAP.items()
+        if domain in SUPPORTED_DECISION_DOMAINS
+    }
+
+
+def validate_upload_attributes(
+    df: pd.DataFrame,
+    requested_domain: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Validate that an uploaded dataframe matches one complete domain profile."""
+    attributes_by_domain = get_domain_attribute_profiles()
+    normalized_present = {normalize_column_name(col): str(col) for col in df.columns}
+
+    candidates = (
+        {requested_domain: attributes_by_domain[requested_domain]}
+        if requested_domain in attributes_by_domain
+        else attributes_by_domain
+    )
+
+    results: Dict[str, Dict[str, Any]] = {}
+    for domain, expected in candidates.items():
+        matched = [field for field in expected if normalize_column_name(field) in normalized_present]
+        missing = [field for field in expected if normalize_column_name(field) not in normalized_present]
+        extra = [
+            source
+            for norm, source in normalized_present.items()
+            if norm not in {normalize_column_name(field) for field in expected}
+        ]
+        results[domain] = {
+            "domain": domain,
+            "is_valid": not missing,
+            "expected_attributes": expected,
+            "matched_attributes": matched,
+            "missing_attributes": missing,
+            "extra_attributes": extra,
+            "match_ratio": round(len(matched) / max(1, len(expected)), 4),
+        }
+
+    valid = [item for item in results.values() if item["is_valid"]]
+    if valid:
+        best = sorted(valid, key=lambda item: item["match_ratio"], reverse=True)[0]
+        return {
+            **best,
+            "attributes_by_domain": attributes_by_domain,
+            "checked_domains": results,
+        }
+
+    best = sorted(results.values(), key=lambda item: item["match_ratio"], reverse=True)[0]
+    return {
+        **best,
+        "is_valid": False,
+        "attributes_by_domain": attributes_by_domain,
+        "checked_domains": results,
+    }
+
+
+def _match_scan_restriction_profile(columns: List[str]) -> Dict[str, Any]:
+    normalized_present = {normalize_column_name(col) for col in columns}
+    best_name: Optional[str] = None
+    best_ratio = 0.0
+    best_matched: List[str] = []
+    best_missing: List[str] = []
+
+    for profile_name, profile_columns in SCAN_RESTRICTION_PROFILES.items():
+        matched = [col for col in profile_columns if normalize_column_name(col) in normalized_present]
+        missing = [col for col in profile_columns if normalize_column_name(col) not in normalized_present]
+        ratio = len(matched) / max(1, len(profile_columns))
+        if ratio > best_ratio:
+            best_ratio = ratio
+            best_name = profile_name
+            best_matched = matched
+            best_missing = missing
+
+    return {
+        "is_allowed": best_name is not None and best_ratio >= SCAN_PROFILE_MIN_MATCH_RATIO,
+        "profile": best_name,
+        "match_ratio": round(best_ratio, 4),
+        "matched_columns": best_matched,
+        "missing_columns": best_missing,
+    }
+
+
+def _build_column_mapping_from_profile(profile_name: str, columns: List[str]) -> Dict[str, str]:
+    if profile_name not in PROFILE_CANONICAL_COLUMN_MAP:
+        return {}
+    normalized_to_source = {normalize_column_name(col): str(col) for col in columns}
+    mapping: Dict[str, str] = {}
+    for canonical, profile_col in PROFILE_CANONICAL_COLUMN_MAP[profile_name].items():
+        source = normalized_to_source.get(normalize_column_name(profile_col))
+        if source:
+            mapping[canonical] = source
+    return mapping
+
+
+def _record_identifier(row: pd.Series, fallback_pos: int) -> str:
+    for key in ("id", "applicant_id", "candidate_id", "loan_id", "name", "full_name"):
+        if key in row.index:
+            raw = row.get(key)
+            if raw is not None:
+                text = str(raw).strip()
+                if text:
+                    return text
+    return f"ROW-{fallback_pos + 1:05d}"
+
+
+def _write_downloadable_reports(
+    *,
+    file_id: str,
+    upload_dir: Path,
+    domain: str,
+    decision_summary_table: List[Dict[str, Any]],
+    detailed_breakdown: List[Dict[str, Any]],
+) -> Dict[str, str]:
+    report_json = upload_dir / f"{file_id}_analysis_report.json"
+    report_csv = upload_dir / f"{file_id}_analysis_summary.csv"
+
+    payload = {
+        "file_id": file_id,
+        "domain": domain,
+        "generated_rows": len(detailed_breakdown),
+        "summary_table": decision_summary_table,
+        "detailed_breakdown": detailed_breakdown,
+    }
+    report_json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    summary_df = pd.DataFrame(decision_summary_table)
+    summary_df.to_csv(report_csv, index=False)
+
+    return {
+        "json_path": str(report_json.resolve()),
+        "csv_path": str(report_csv.resolve()),
+    }
+
+
+def _serialize_cell_value(value: Any) -> Any:
+    if pd.isna(value):
+        return None
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating,)):
+        return float(value)
+    return value
+
+
+def _row_column_values(row: pd.Series) -> List[Dict[str, Any]]:
+    return [
+        {
+            "column": str(column),
+            "value": _serialize_cell_value(row.get(column)),
+            "is_missing": pd.isna(row.get(column)),
+        }
+        for column in row.index
+    ]
+
+
+def _column_breakdown(
+    df: pd.DataFrame,
+    domain: str,
+    column_mapping: Dict[str, str],
+    sensitive_columns: Dict[str, str],
+    target_column: Optional[str],
+) -> List[Dict[str, Any]]:
+    reverse_mapping = {source: feature for feature, source in column_mapping.items()}
+    reverse_sensitive = {source: attr for attr, source in sensitive_columns.items()}
+    breakdown: List[Dict[str, Any]] = []
+
+    for column in df.columns:
+        series = df[column]
+        missing_count = int(series.isna().sum())
+        mapped_feature = reverse_mapping.get(str(column))
+        sensitive_attribute = reverse_sensitive.get(str(column))
+        role = "unmapped"
+        if str(column) == str(target_column):
+            role = "target"
+        elif mapped_feature:
+            role = "prediction_feature"
+        elif sensitive_attribute:
+            role = "sensitive_attribute"
+
+        numeric = pd.to_numeric(series, errors="coerce")
+        numeric_non_null = numeric.dropna()
+        numeric_stats = None
+        if not numeric_non_null.empty:
+            numeric_stats = {
+                "min": round(float(numeric_non_null.min()), 4),
+                "max": round(float(numeric_non_null.max()), 4),
+                "mean": round(float(numeric_non_null.mean()), 4),
+            }
+
+        samples = [
+            str(value)
+            for value in series.dropna().head(5).tolist()
+        ]
+
+        breakdown.append({
+            "column": str(column),
+            "role": role,
+            "mapped_feature": mapped_feature,
+            "sensitive_attribute": sensitive_attribute,
+            "domain": domain,
+            "dtype": str(series.dtype),
+            "missing_count": missing_count,
+            "missing_percent": round((missing_count / max(1, len(df))) * 100, 2),
+            "unique_count": int(series.nunique(dropna=True)),
+            "sample_values": samples,
+            "numeric_stats": numeric_stats,
+        })
+
+    return breakdown
 
 
 def detect_target_column(df: pd.DataFrame, domain: str) -> Optional[str]:
@@ -920,14 +1240,20 @@ async def batch_predict(
             }
             await save_prediction(log_record)
 
+            record_id = _record_identifier(row, pos)
+            row_number = int(idx) if isinstance(idx, (int, np.integer)) else pos
             results.append({
-                "row": int(idx) if isinstance(idx, (int, np.integer)) else pos,
+                "id": record_id,
+                "row": row_number,
                 "prediction": prediction,
                 "confidence": round(confidence, 4),
                 "prediction_label": prediction_label,
                 "bias_risk_score": float(result.get("bias_risk", {}).get("score", 0.0)),
                 "flagged": bool(result.get("bias_risk", {}).get("flag_for_review", False)),
                 "ground_truth": ground_truth,
+                "inputs": features,
+                "columns": _row_column_values(row),
+                "explanation": str(result.get("explanation", "")),
             })
             predictions.append(prediction)
             confidences.append(round(confidence, 4))
@@ -956,6 +1282,30 @@ async def batch_predict(
     high_bias_count = sum(1 for item in results if item["bias_risk_score"] >= 0.5)
     flagged_count = sum(1 for item in results if item["flagged"])
 
+    decision_summary_table = [
+        {
+            "id": item["id"],
+            "row": item["row"],
+            "primary_decision": item["prediction_label"],
+        }
+        for item in results
+    ]
+    detailed_breakdown = [
+        {
+            "id": item["id"],
+            "row": item["row"],
+            "decision": item["prediction_label"],
+            "confidence": item["confidence"],
+            "bias_risk_score": item["bias_risk_score"],
+            "flagged_for_review": item["flagged"],
+            "inputs": item["inputs"],
+            "columns": item["columns"],
+            "logic": item["explanation"],
+        }
+        for item in results
+    ]
+    column_breakdown = _column_breakdown(working_df, domain, column_mapping, sensitive_columns, target_column)
+
     final_report = {
         "validation": validation,
         "model": {
@@ -979,7 +1329,12 @@ async def batch_predict(
         "high_bias_risk_count": high_bias_count,
         "flagged_for_review": flagged_count,
         "errors": errors[:50],
+        "record_ids": [item["id"] for item in results],
+        "results": results,
         "results_preview": results[:25],
+        "decision_summary_table": decision_summary_table,
+        "detailed_breakdown": detailed_breakdown,
+        "column_breakdown": column_breakdown,
         "target_column": target_column,
         "sensitive_columns": sensitive_columns,
         "unmapped_schema_fields": sorted(set(DEFAULT_FEATURE_VALUES[domain].keys()) - set(column_mapping.keys())),
@@ -1010,35 +1365,40 @@ async def analyze_uploaded_file(
         raise FileNotFoundError(f"File data not found: {stored_name}")
 
     extension = Path(stored_name).suffix.lower()
+    if extension not in DATA_EXTENSIONS:
+        return _invalid_data_response(file_id=file_id, rows_total=0)
+
     try:
         df = read_tabular_file(file_path, extension)
     except Exception as exc:
-        logger.info("Tabular parse failed for %s (%s); using inspection fallback.", file_id, exc)
-        return await _analyze_non_tabular_file(
-            file_id=file_id,
-            metadata=metadata,
-            file_path=file_path,
-            upload_dir=upload_dir,
-            max_rows=max_rows,
-            model_file=model_file,
-        )
+        logger.info("Tabular parse failed for %s (%s); returning invalid data.", file_id, exc)
+        return _invalid_data_response(file_id=file_id, rows_total=0)
 
     if df.empty:
         raise ValueError("File contains no data rows")
 
-    domain, confidence, column_mapping = detect_domain(df)
-    if not domain:
-        return {
-            "success": False,
-            "file_id": file_id,
-            "error": "Could not auto-detect domain. Ensure column names match hiring / loan / social schema.",
-            "detected_domain": None,
-            "confidence": 0.0,
-            "rows_total": int(len(df)),
-            "rows_predicted": 0,
-            "rows_failed": 0,
-            "errors": [],
-        }
+    restriction = _match_scan_restriction_profile(list(df.columns))
+    if not restriction["is_allowed"]:
+        return _invalid_data_response(file_id=file_id, rows_total=int(len(df)))
+
+    restricted_profile = str(restriction["profile"])
+    restricted_domain = PROFILE_DOMAIN_MAP.get(restricted_profile)
+    if restricted_domain not in SUPPORTED_DECISION_DOMAINS:
+        return _invalid_data_response(file_id=file_id, rows_total=int(len(df)))
+
+    detected_domain, detected_confidence, detected_mapping = detect_domain(df)
+    profile_mapping = _build_column_mapping_from_profile(restricted_profile, list(df.columns))
+
+    domain = restricted_domain
+    confidence = float(restriction["match_ratio"])
+    column_mapping = profile_mapping
+
+    if detected_domain == restricted_domain and detected_mapping:
+        confidence = max(confidence, detected_confidence)
+        column_mapping = {**profile_mapping, **detected_mapping}
+
+    if not column_mapping:
+        return _invalid_data_response(file_id=file_id, rows_total=int(len(df)))
 
     summary = await batch_predict(
         df=df,
@@ -1047,6 +1407,13 @@ async def analyze_uploaded_file(
         upload_dir=upload_dir,
         model_file=model_file,
         max_rows=max_rows,
+    )
+    downloadable_report = _write_downloadable_reports(
+        file_id=file_id,
+        upload_dir=upload_dir,
+        domain=domain,
+        decision_summary_table=summary["decision_summary_table"],
+        detailed_breakdown=summary["detailed_breakdown"],
     )
 
     return {
@@ -1074,7 +1441,14 @@ async def analyze_uploaded_file(
         "model": summary["final_report"]["model"],
         "errors": summary["errors"],
         "unmapped_columns": summary["unmapped_schema_fields"],
+        "record_ids": summary["record_ids"],
+        "results": summary["results"],
         "results_preview": summary["results_preview"],
+        "decision_summary_table": summary["decision_summary_table"],
+        "detailed_breakdown": summary["detailed_breakdown"],
+        "column_breakdown": summary["column_breakdown"],
+        "downloadable_report": downloadable_report,
+        "scan_restriction": restriction,
         "suggested_profile": summary["suggested_profile"],
         "scan_result": {
             "file_id": file_id,
@@ -1107,101 +1481,5 @@ async def _analyze_non_tabular_file(
     max_rows: int,
     model_file: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    from .file_inspector import inspect_file
-
-    inspection = inspect_file(file_path, metadata)
-    domain = _select_fallback_domain(metadata, inspection)
-
-    if not domain:
-        return {
-            "success": False,
-            "file_id": file_id,
-            "error": (
-                "Could not infer a prediction domain from this file. "
-                "Add clear domain fields (hiring/loan/social) or choose a domain during upload."
-            ),
-            "detected_domain": None,
-            "confidence": 0.0,
-            "rows_total": 1,
-            "rows_predicted": 0,
-            "rows_failed": 1,
-            "errors": [{"row": 0, "message": "Domain inference failed for non-tabular analysis."}],
-            "inspection_kind": inspection.get("kind"),
-        }
-
-    suggested = inspection.get("suggested_parameters") or {}
-    defaults = DEFAULT_FEATURE_VALUES[domain]
-
-    synthetic_row: Dict[str, Any] = {}
-    for feature, default in defaults.items():
-        synthetic_row[feature] = _coerce_feature_value(feature, suggested.get(feature, default), default)
-
-    if domain == "social":
-        like_rate = float(synthetic_row.get("like_rate", defaults["like_rate"]))
-        share_rate = float(synthetic_row.get("share_rate", defaults["share_rate"]))
-        comment_rate = float(synthetic_row.get("comment_rate", defaults["comment_rate"]))
-        like_rate = max(0.0, min(1.0, like_rate))
-        synthetic_row["like_rate"] = like_rate
-        synthetic_row["share_rate"] = min(like_rate, max(0.0, min(1.0, share_rate)))
-        synthetic_row["comment_rate"] = min(like_rate, max(0.0, min(1.0, comment_rate)))
-
-    for sensitive_field in SENSITIVE_FIELDS:
-        raw = suggested.get(sensitive_field)
-        if raw is not None and str(raw).strip() != "":
-            synthetic_row[sensitive_field] = str(raw).strip()
-
-    synthetic_df = pd.DataFrame([synthetic_row])
-    column_mapping = {feature: feature for feature in defaults.keys()}
-
-    summary = await batch_predict(
-        df=synthetic_df,
-        domain=domain,
-        column_mapping=column_mapping,
-        upload_dir=upload_dir,
-        model_file=model_file,
-        max_rows=max(1, min(max_rows, 10000)),
-    )
-
-    signal_count = sum(1 for feature in defaults if feature in suggested and suggested.get(feature) not in (None, ""))
-    confidence = signal_count / max(1, len(defaults))
-    confidence = min(1.0, max(0.25, confidence))
-    if inspection.get("inferred_domain") == domain:
-        confidence = min(1.0, confidence + 0.15)
-
-    return {
-        "success": True,
-        "file_id": file_id,
-        "detected_domain": domain,
-        "confidence": round(confidence, 4),
-        "column_mapping": column_mapping,
-        "scan_result": {
-            "file_id": file_id,
-            "domain": domain,
-            "row_index": 0,
-            "profile": summary["suggested_profile"],
-            "column_mapping": column_mapping,
-        },
-        "rows_total": summary["rows_total"],
-        "rows_predicted": summary["rows_predicted"],
-        "rows_failed": summary["rows_failed"],
-        "summary": {
-            "approval_rate": summary["approval_rate"],
-            "avg_confidence": summary["avg_confidence"],
-            "high_bias_risk_count": summary["high_bias_risk_count"],
-            "flagged_for_review": summary["flagged_for_review"],
-        },
-        "validation": summary["final_report"]["validation"],
-        "performance": summary["final_report"]["performance"],
-        "fairness": summary["final_report"]["fairness"],
-        "scores": summary["final_report"]["scores"],
-        "report": summary["final_report"],
-        "target_column": summary["target_column"],
-        "sensitive_columns": summary["sensitive_columns"],
-        "model": summary["final_report"]["model"],
-        "errors": summary["errors"],
-        "unmapped_columns": summary["unmapped_schema_fields"],
-        "results_preview": summary["results_preview"],
-        "suggested_profile": summary["suggested_profile"],
-        "analysis_source": "inspection_fallback",
-        "inspection_kind": inspection.get("kind"),
-    }
+    _ = metadata, file_path, upload_dir, max_rows, model_file
+    return _invalid_data_response(file_id=file_id, rows_total=0)

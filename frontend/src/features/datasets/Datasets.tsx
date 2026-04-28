@@ -28,23 +28,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   other: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
 };
 
-// Allowed file extensions for display
-const ALLOWED_TYPES = [
-  // Images
-  '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.tiff', '.ico',
-  // Documents
-  '.pdf', '.doc', '.docx', '.txt', '.rtf', '.odt',
-  // Spreadsheets
-  '.csv', '.xls', '.xlsx', '.ods',
-  // Data formats
-  '.json', '.parquet', '.xml', '.yaml', '.yml',
-  // Model formats
-  '.pkl', '.joblib',
-  // Archives
-  '.zip', '.tar', '.gz', '.bz2',
-  // Code/Text
-  '.py', '.js', '.ts', '.html', '.css', '.md', '.log',
-];
+// The backend validates and analyzes only CSV/JSON datasets.
+const ALLOWED_TYPES = ['.csv', '.json'];
 
 interface DatasetsProps {
   /**
@@ -79,6 +64,7 @@ export function Datasets({ scanTrigger = 0, onScanComplete }: DatasetsProps) {
   // Analysis states
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<DatasetAnalysisResult | null>(null);
+  const [selectedAnalysisRow, setSelectedAnalysisRow] = useState(0);
 
   // Auto-inspection states (content scan for ANY file type)
   const [inspecting, setInspecting] = useState(false);
@@ -109,6 +95,10 @@ export function Datasets({ scanTrigger = 0, onScanComplete }: DatasetsProps) {
   useEffect(() => {
     fetchFiles();
   }, [fetchFiles]);
+
+  useEffect(() => {
+    setSelectedAnalysisRow(0);
+  }, [analysisResult?.file_id]);
 
   const handleDrag = (e: DragEvent) => {
     e.preventDefault();
@@ -159,7 +149,10 @@ export function Datasets({ scanTrigger = 0, onScanComplete }: DatasetsProps) {
           return next;
         });
 
-        return response.file;
+        return {
+          file: response.file,
+          analysis: response.analysis ?? null,
+        };
       } catch (err) {
         // Remove from uploading map on error
         setUploadingFiles(prev => {
@@ -172,7 +165,8 @@ export function Datasets({ scanTrigger = 0, onScanComplete }: DatasetsProps) {
     });
 
     try {
-      const uploadedFiles = await Promise.all(uploadPromises);
+      const uploadedItems = await Promise.all(uploadPromises);
+      const uploadedFiles = uploadedItems.map((item) => item.file);
       // Refresh file list
       fetchFiles();
       // Clear form
@@ -197,11 +191,14 @@ export function Datasets({ scanTrigger = 0, onScanComplete }: DatasetsProps) {
       }
       setInspecting(false);
 
-      // Auto-analyze every uploaded file. Non-tabular files use backend
-      // inspection fallback so users still get prediction-style analysis.
+      // Upload now triggers backend analysis; only call analyze manually if an
+      // older backend did not include analysis in the upload response.
       if (uploadedFiles.length > 0) {
-        const analysisResults: DatasetAnalysisResult[] = [];
-        for (const uploadedFile of uploadedFiles) {
+        const analysisResults: DatasetAnalysisResult[] = uploadedItems
+          .map((item) => item.analysis)
+          .filter((item): item is DatasetAnalysisResult => Boolean(item));
+        const analyzedFileIds = new Set(analysisResults.map((item) => item.file_id));
+        for (const uploadedFile of uploadedFiles.filter((item) => !analyzedFileIds.has(item.id))) {
           const analysis = await handleAnalyze(uploadedFile.id, false);
           if (analysis) analysisResults.push(analysis);
         }
@@ -227,8 +224,8 @@ export function Datasets({ scanTrigger = 0, onScanComplete }: DatasetsProps) {
         });
       }
       onScanComplete?.();
-    } catch {
-      alert('Some files failed to upload. Please try again.');
+    } catch (err) {
+      alert('Upload rejected: ' + (err as Error).message);
     }
   };
 
@@ -395,7 +392,7 @@ export function Datasets({ scanTrigger = 0, onScanComplete }: DatasetsProps) {
             File Manager
           </h1>
           <p className="text-zinc-600 dark:text-zinc-400 mt-1">
-            Upload images, PDFs, documents, datasets, and any file type
+            Upload CSV or JSON datasets for automatic schema validation and analysis
           </p>
         </div>
         {fileStats && (
@@ -446,10 +443,10 @@ export function Datasets({ scanTrigger = 0, onScanComplete }: DatasetsProps) {
         <div className="text-center">
           <Upload className={`mx-auto mb-4 ${dragActive ? 'text-emerald-600' : 'text-zinc-400'}`} size={48} />
           <h3 className="text-xl font-medium dark:text-white">
-            {dragActive ? 'Drop files here' : 'Drag & drop any files'}
+            {dragActive ? 'Drop CSV/JSON files here' : 'Drag & drop CSV/JSON files'}
           </h3>
           <p className="text-zinc-500 mt-2">
-            Images, PDFs, Word docs, Excel, CSV, JSON, PKL, Joblib, ZIP, and more
+            Files must match one complete Hiring, Loan, or Social domain schema
           </p>
           
           {/* Upload Options */}
@@ -764,7 +761,7 @@ export function Datasets({ scanTrigger = 0, onScanComplete }: DatasetsProps) {
           onClick={() => setAnalysisResult(null)}
         >
           <div
-            className="bg-white dark:bg-zinc-900 rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-auto"
+            className="bg-white dark:bg-zinc-900 rounded-3xl max-w-6xl w-full max-h-[90vh] overflow-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-6 border-b dark:border-zinc-800 flex justify-between items-center">
@@ -829,6 +826,170 @@ export function Datasets({ scanTrigger = 0, onScanComplete }: DatasetsProps) {
                       <p className="text-xs text-zinc-400">high bias risk</p>
                     </div>
                   </div>
+
+                  {(() => {
+                    const rowResults = analysisResult.results ?? analysisResult.results_preview ?? [];
+                    const safeIndex = Math.min(selectedAnalysisRow, Math.max(0, rowResults.length - 1));
+                    const selectedRow = rowResults[safeIndex];
+
+                    if (rowResults.length === 0) return null;
+
+                    return (
+                      <div className="grid lg:grid-cols-[280px,1fr] gap-4">
+                        <div className="bg-zinc-50 dark:bg-zinc-800 rounded-2xl p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="font-semibold dark:text-white">Row Results</h3>
+                            <span className="text-xs text-zinc-500">{rowResults.length} rows</span>
+                          </div>
+                          <div className="space-y-2 max-h-80 overflow-auto pr-1">
+                            {rowResults.map((row, index) => (
+                              <button
+                                key={`${row.id ?? row.row}-${index}`}
+                                onClick={() => setSelectedAnalysisRow(index)}
+                                className={`w-full text-left rounded-xl border p-3 transition-all ${
+                                  index === safeIndex
+                                    ? 'border-emerald-500 bg-white dark:bg-zinc-900 shadow-sm'
+                                    : 'border-transparent bg-white/70 dark:bg-zinc-900/50 hover:border-zinc-300 dark:hover:border-zinc-700'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-medium dark:text-white">Row {row.row + 1}</span>
+                                  {row.flagged && (
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">
+                                      Flagged
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-zinc-600 dark:text-zinc-400 truncate">
+                                  {row.prediction_label ?? 'No decision'}
+                                </p>
+                                {typeof row.confidence === 'number' && (
+                                  <p className="text-xs text-zinc-400">
+                                    Confidence {(row.confidence * 100).toFixed(0)}%
+                                  </p>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {selectedRow && (
+                          <div className="space-y-4">
+                            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4">
+                              <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                                <div>
+                                  <h3 className="font-semibold dark:text-white">Row {selectedRow.row + 1} Detail</h3>
+                                  <p className="text-sm text-zinc-500">
+                                    ID: {selectedRow.id ?? `ROW-${selectedRow.row + 1}`}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-lg font-semibold dark:text-white">
+                                    {selectedRow.prediction_label ?? 'No decision'}
+                                  </p>
+                                  {typeof selectedRow.bias_risk_score === 'number' && (
+                                    <p className="text-xs text-zinc-500">
+                                      Bias risk {(selectedRow.bias_risk_score * 100).toFixed(0)}%
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {selectedRow.explanation && (
+                                <p className="mb-4 rounded-xl bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 p-3 text-sm text-emerald-800 dark:text-emerald-200">
+                                  {selectedRow.explanation}
+                                </p>
+                              )}
+
+                              {selectedRow.inputs && Object.keys(selectedRow.inputs).length > 0 && (
+                                <div className="mb-4">
+                                  <h4 className="text-sm font-semibold dark:text-white mb-2">Model Inputs</h4>
+                                  <div className="grid sm:grid-cols-2 gap-2">
+                                    {Object.entries(selectedRow.inputs).map(([key, value]) => (
+                                      <div key={key} className="rounded-xl bg-zinc-50 dark:bg-zinc-800 p-3">
+                                        <p className="text-xs text-zinc-500">{key}</p>
+                                        <p className="font-medium dark:text-white break-all">{String(value)}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {selectedRow.columns && selectedRow.columns.length > 0 && (
+                                <div>
+                                  <h4 className="text-sm font-semibold dark:text-white mb-2">Original Row Columns</h4>
+                                  <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+                                    <table className="w-full text-sm">
+                                      <thead className="bg-zinc-50 dark:bg-zinc-800">
+                                        <tr>
+                                          <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Column</th>
+                                          <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Value</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {selectedRow.columns.map((column) => (
+                                          <tr key={column.column} className="border-t border-zinc-200 dark:border-zinc-800">
+                                            <td className="py-2 px-3 font-medium dark:text-white whitespace-nowrap">{column.column}</td>
+                                            <td className="py-2 px-3 dark:text-zinc-200">
+                                              {column.is_missing || column.value === null || column.value === undefined
+                                                ? <span className="text-zinc-400">missing</span>
+                                                : String(column.value)}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {analysisResult.column_breakdown && analysisResult.column_breakdown.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold dark:text-white mb-3">Column-by-Column Analysis</h3>
+                      <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+                        <table className="w-full text-sm">
+                          <thead className="bg-zinc-50 dark:bg-zinc-800">
+                            <tr>
+                              <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Column</th>
+                              <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Role</th>
+                              <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Type</th>
+                              <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Missing</th>
+                              <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Unique</th>
+                              <th className="text-left py-2 px-3 text-zinc-600 dark:text-zinc-400">Stats / Samples</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {analysisResult.column_breakdown.map((column) => (
+                              <tr key={column.column} className="border-t border-zinc-200 dark:border-zinc-800">
+                                <td className="py-2 px-3 font-medium dark:text-white whitespace-nowrap">{column.column}</td>
+                                <td className="py-2 px-3">
+                                  <span className="text-xs px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                                    {column.mapped_feature ?? column.sensitive_attribute ?? column.role}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 text-zinc-600 dark:text-zinc-400">{column.dtype}</td>
+                                <td className="py-2 px-3 dark:text-white">
+                                  {column.missing_count} ({column.missing_percent}%)
+                                </td>
+                                <td className="py-2 px-3 dark:text-white">{column.unique_count}</td>
+                                <td className="py-2 px-3 text-zinc-500 dark:text-zinc-400 min-w-[220px]">
+                                  {column.numeric_stats
+                                    ? `min ${column.numeric_stats.min}, mean ${column.numeric_stats.mean}, max ${column.numeric_stats.max}`
+                                    : column.sample_values.join(', ') || '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Column Mapping */}
                   {analysisResult.column_mapping && (

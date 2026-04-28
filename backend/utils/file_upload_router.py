@@ -9,7 +9,7 @@ import os
 import json
 import uuid
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Query, Body
@@ -21,23 +21,8 @@ UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "./uploads"))
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "100"))
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
-# Allowed file extensions by category
-ALLOWED_EXTENSIONS = {
-    # Images
-    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".tiff", ".ico",
-    # Documents
-    ".pdf", ".doc", ".docx", ".txt", ".rtf", ".odt",
-    # Spreadsheets
-    ".csv", ".xls", ".xlsx", ".ods",
-    # Data formats
-    ".json", ".parquet", ".xml", ".yaml", ".yml",
-    # Model formats
-    ".pkl", ".joblib",
-    # Archives (optional)
-    ".zip", ".tar", ".gz", ".bz2",
-    # Code/Text files
-    ".py", ".js", ".ts", ".html", ".css", ".md", ".log",
-}
+# Only CSV and JSON datasets may be uploaded.
+ALLOWED_EXTENSIONS = {".csv", ".json"}
 
 # MIME type mapping for preview
 MIME_TYPES = {
@@ -85,6 +70,7 @@ class FileUploadResponse(BaseModel):
     success: bool
     message: str
     file: FileMetadata
+    analysis: Optional[Dict[str, Any]] = None
 
 
 class FileDeleteResponse(BaseModel):
@@ -97,6 +83,13 @@ class ScanRequest(BaseModel):
     domain: Optional[str] = Field(default=None, pattern=r"^(hiring|loan|social)$")
     file_id: Optional[str] = None
     max_rows: int = Field(default=10000, ge=1, le=50000)
+
+
+class CSVSchemaScanRequest(BaseModel):
+    social_media_path: Optional[str] = Field(default=None, description="Override path for SocialMediaCreator schema")
+    loan_approval_path: Optional[str] = Field(default=None, description="Override path for LoanApproval schema")
+    hiring_applicant_path: Optional[str] = Field(default=None, description="Override path for HiringJobApplicant schema")
+    chunk_size: int = Field(default=5000, ge=100, le=100000)
 
 
 def infer_file_role(filename: str, ext: str) -> str:
@@ -139,7 +132,7 @@ def validate_file(file: UploadFile) -> tuple[bool, str]:
     
     if ext not in ALLOWED_EXTENSIONS:
         allowed_list = ", ".join(sorted(ALLOWED_EXTENSIONS))
-        return False, f"File type '{ext}' not allowed. Allowed: {allowed_list}"
+        return False, f"File type '{ext}' not allowed. Only CSV and JSON files are allowed: {allowed_list}"
     
     # Check file size (read first chunk)
     contents = file.file.read(MAX_FILE_SIZE_BYTES + 1)
@@ -159,7 +152,7 @@ async def upload_file(
     domain: Optional[str] = Form(None, description="Associated domain: loan, hiring, social"),
 ):
     """
-    Upload any supported file type (images, PDFs, docs, data files, etc.)
+    Upload a CSV/JSON dataset, validate its domain attributes, then run analysis.
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
@@ -172,7 +165,7 @@ async def upload_file(
     # Generate unique filename
     file_id = str(uuid.uuid4())
     ext = Path(file.filename).suffix.lower()
-    stored_name = f"{file_id}{ext}"
+    stored_name = f"{file_id}_data{ext}"
     file_path = UPLOAD_DIR / stored_name
     
     # Save file
@@ -184,6 +177,38 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
     finally:
         await file.close()
+
+    try:
+        from .dataset_analyzer import (
+            analyze_uploaded_file,
+            read_tabular_file,
+            validate_upload_attributes,
+        )
+
+        df = read_tabular_file(file_path, ext)
+        schema_validation = validate_upload_attributes(df, requested_domain=domain)
+        if not schema_validation["is_valid"]:
+            file_path.unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": (
+                        "Uploaded file rejected. Its attributes do not match the required "
+                        f"{schema_validation['domain']} domain schema."
+                    ),
+                    "domain": schema_validation["domain"],
+                    "missing_attributes": schema_validation["missing_attributes"],
+                    "expected_attributes": schema_validation["expected_attributes"],
+                    "attributes_by_domain": schema_validation["attributes_by_domain"],
+                },
+            )
+
+        validated_domain = schema_validation["domain"]
+    except HTTPException:
+        raise
+    except Exception as e:
+        file_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=f"Failed to read CSV/JSON dataset: {str(e)}")
     
     # Build metadata
     size_bytes = len(contents)
@@ -199,7 +224,7 @@ async def upload_file(
         uploaded_at=datetime.now(timezone.utc).isoformat(),
         description=description,
         tags=[t.strip() for t in (tags or "").split(",") if t.strip()],
-        domain=domain,
+        domain=validated_domain,
         role=infer_file_role(file.filename, ext),
     )
     
@@ -208,11 +233,30 @@ async def upload_file(
     with open(meta_path, "w") as f:
         import json
         json.dump(metadata.model_dump(), f, indent=2)
+
+    try:
+        analysis = await analyze_uploaded_file(file_id, UPLOAD_DIR)
+    except Exception as e:
+        file_path.unlink(missing_ok=True)
+        meta_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail=f"Upload saved but automatic analysis failed: {str(e)}")
+
+    if not analysis.get("success"):
+        file_path.unlink(missing_ok=True)
+        meta_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": analysis.get("error", "Automatic analysis rejected this dataset."),
+                "analysis": analysis,
+            },
+        )
     
     return FileUploadResponse(
         success=True,
-        message=f"File '{file.filename}' uploaded successfully",
+        message=f"File '{file.filename}' uploaded successfully and analyzed automatically",
         file=metadata,
+        analysis=analysis,
     )
 
 
@@ -465,7 +509,9 @@ async def scan_files(body: ScanRequest = Body(default_factory=ScanRequest)):
     for meta_path in meta_files:
         try:
             with open(meta_path, "r", encoding="utf-8") as handle:
-                entries.append(json.load(handle))
+                data = json.load(handle)
+                if isinstance(data, dict) and data.get("id") and data.get("stored_name"):
+                    entries.append(data)
         except Exception:
             continue
 
@@ -481,7 +527,7 @@ async def scan_files(body: ScanRequest = Body(default_factory=ScanRequest)):
     if not dataset_files:
         raise HTTPException(
             status_code=400,
-            detail="No uploaded dataset found. Upload a CSV, Excel, JSON, Parquet, or ODS file first.",
+            detail="No uploaded dataset found. Upload a CSV or JSON file first.",
         )
 
     selected_dataset: Optional[dict] = None
@@ -543,5 +589,35 @@ async def scan_files(body: ScanRequest = Body(default_factory=ScanRequest)):
                 if analysis.get("success")
                 else analysis.get("error", "Scan failed.")
             ),
+        }
+    )
+
+
+@router.post("/scan-csv-schemas")
+async def scan_csv_schemas(body: CSVSchemaScanRequest = Body(default_factory=CSVSchemaScanRequest)):
+    """
+    Scan CSV files using three fixed schemas:
+    - SocialMediaCreator
+    - LoanApproval
+    - HiringJobApplicant
+    Returns structured metrics and markdown summary reports.
+    """
+    from .schema_csv_scanner import scan_all_schemas
+
+    overrides = {
+        "SocialMediaCreator": body.social_media_path,
+        "LoanApproval": body.loan_approval_path,
+        "HiringJobApplicant": body.hiring_applicant_path,
+    }
+    overrides = {k: v for k, v in overrides.items() if v}
+
+    result = scan_all_schemas(overrides=overrides, chunk_size=body.chunk_size)
+    return JSONResponse(
+        content={
+            "success": True,
+            "scan_mode": "fixed_csv_schemas",
+            "schemas_scanned": 3,
+            "chunk_size": body.chunk_size,
+            **result,
         }
     )

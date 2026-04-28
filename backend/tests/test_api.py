@@ -137,11 +137,13 @@ class TestFileScanPipeline:
 
     def test_upload_and_scan_generates_final_report(self, app_client):
         csv_data = (
-            "credit_score,annual_income,loan_amount,loan_term_months,employment_years,"
-            "existing_debt,num_credit_lines,gender,ground_truth\n"
-            "720,85000,20000,36,5,5000,4,Female,1\n"
-            "640,50000,30000,60,2,18000,3,Male,0\n"
-            "780,95000,15000,24,6,2000,5,Female,1\n"
+            "applicant_uid,monthly_stable_income,credit_history_score,debt_to_income_ratio,"
+            "employment_stability_years,existing_loan_count,collateral_valuation_amount,"
+            "requested_loan_tenure,payment_default_history,verified_identity_flag,"
+            "residential_status_stability,bank_statement_analysis_score,is_eligible_for_loan\n"
+            "L001,7000,720,0.32,5,1,20000,36,0,1,1,82,1\n"
+            "L002,4200,640,0.56,2,2,15000,60,1,1,0,58,0\n"
+            "L003,8200,780,0.21,6,0,25000,24,0,1,1,91,1\n"
         )
 
         upload = app_client.post(
@@ -151,6 +153,8 @@ class TestFileScanPipeline:
         )
         assert upload.status_code == 200
         file_id = upload.json()["file"]["id"]
+        assert upload.json()["analysis"]["success"] is True
+        assert upload.json()["analysis"]["detected_domain"] == "loan"
 
         with patch("utils.dataset_analyzer.save_prediction") as save_prediction_mock:
             scan = app_client.post("/files/scan", json={"domain": "loan", "file_id": file_id})
@@ -170,7 +174,75 @@ class TestFileScanPipeline:
         assert "validation" in data and "performance" in data and "fairness" in data
         assert save_prediction_mock.await_count >= 1
 
-    def test_non_tabular_file_can_be_analyzed(self, app_client):
+    def test_analyze_returns_full_row_breakdown_with_export_paths(self, app_client):
+        csv_data = (
+            "candidate_id,full_name,degree_specialization,cgpa_percentage,years_of_experience,"
+            "technical_skills_list,dbms_proficiency_level,ai_ml_frameworks_known,projects_github_count,"
+            "certification_validity_score,last_job_role,expected_salary_range,is_legitimate_candidate\n"
+            "C001,Alice,bachelor,82,5,\"python;sql\",85,\"tensorflow;sklearn\",4,76,Data Engineer,8-12,1\n"
+            "C002,Bob,bachelor,61,1,\"sql\",52,\"\",1,55,Intern,4-6,0\n"
+            "C003,Carol,master,91,8,\"python;ml\",92,\"pytorch;keras\",7,88,ML Engineer,12-18,1\n"
+        )
+
+        upload = app_client.post(
+            "/files/upload",
+            files={"file": ("hiring_batch.csv", csv_data.encode(), "text/csv")},
+            data={"domain": "hiring"},
+        )
+        assert upload.status_code == 200
+        file_id = upload.json()["file"]["id"]
+        assert upload.json()["analysis"]["success"] is True
+        assert upload.json()["analysis"]["detected_domain"] == "hiring"
+
+        with patch("utils.dataset_analyzer.save_prediction") as save_prediction_mock:
+            analyze = app_client.post(f"/files/analyze/{file_id}")
+
+        assert analyze.status_code == 200
+        data = analyze.json()
+        assert data["success"] is True
+        assert data["detected_domain"] == "hiring"
+        assert len(data["results"]) == 3
+        assert len(data["decision_summary_table"]) == 3
+        assert len(data["detailed_breakdown"]) == 3
+        assert data["downloadable_report"]["json_path"].endswith("_analysis_report.json")
+        assert data["downloadable_report"]["csv_path"].endswith("_analysis_summary.csv")
+        assert save_prediction_mock.await_count == 3
+
+    def test_json_upload_does_not_collide_with_metadata_file(self, app_client):
+        json_data = [
+            {
+                "candidate_id": "C900",
+                "full_name": "Json Candidate",
+                "degree_specialization": "Computer Science",
+                "cgpa_percentage": 84,
+                "years_of_experience": 4,
+                "technical_skills_list": "python;sql",
+                "dbms_proficiency_level": 82,
+                "ai_ml_frameworks_known": "sklearn",
+                "projects_github_count": 5,
+                "certification_validity_score": 88,
+                "last_job_role": "Data Engineer",
+                "expected_salary_range": "90000-115000",
+                "is_legitimate_candidate": 1,
+            }
+        ]
+
+        with patch("utils.dataset_analyzer.save_prediction") as save_prediction_mock:
+            upload = app_client.post(
+                "/files/upload",
+                files={"file": ("hiring_batch.json", json.dumps(json_data).encode(), "application/json")},
+                data={"domain": "hiring"},
+            )
+
+        assert upload.status_code == 200
+        payload = upload.json()
+        assert payload["file"]["stored_name"].endswith("_data.json")
+        assert payload["analysis"]["success"] is True
+        assert payload["analysis"]["detected_domain"] == "hiring"
+        assert payload["analysis"]["rows_predicted"] == 1
+        assert save_prediction_mock.await_count == 1
+
+    def test_non_csv_json_file_is_rejected_on_upload(self, app_client):
         text_payload = (
             "loan_amount: 18000\n"
             "credit_score: 705\n"
@@ -183,20 +255,87 @@ class TestFileScanPipeline:
             files={"file": ("loan_profile.txt", text_payload.encode(), "text/plain")},
             data={"domain": "loan"},
         )
-        assert upload.status_code == 200
-        file_id = upload.json()["file"]["id"]
+        assert upload.status_code == 400
+        assert "Only CSV and JSON files are allowed" in upload.json()["detail"]
 
-        with patch("utils.dataset_analyzer.save_prediction") as save_prediction_mock:
-            analyze = app_client.post(f"/files/analyze/{file_id}")
+    def test_upload_rejects_missing_domain_attributes(self, app_client):
+        csv_data = (
+            "applicant_uid,monthly_stable_income,credit_history_score\n"
+            "L001,7000,720\n"
+        )
 
-        assert analyze.status_code == 200
-        data = analyze.json()
-        assert "success" in data
-        assert data.get("detected_domain") in ("loan", "hiring", "social", None)
-        # Non-tabular fallback should never hard-fail with category gating.
-        assert "error" in data or data.get("success") is True
-        if data.get("success"):
-            assert save_prediction_mock.await_count >= 1
+        upload = app_client.post(
+            "/files/upload",
+            files={"file": ("bad_loan.csv", csv_data.encode(), "text/csv")},
+            data={"domain": "loan"},
+        )
+
+        assert upload.status_code == 400
+        detail = upload.json()["detail"]
+        assert detail["domain"] == "loan"
+        assert "debt_to_income_ratio" in detail["missing_attributes"]
+        assert "requested_loan_tenure" in detail["missing_attributes"]
+
+
+class TestCSVSchemaScanner:
+
+    def test_scan_csv_schemas_success(self, app_client, tmp_path):
+        social_csv = tmp_path / "social_media.csv"
+        social_csv.write_text(
+            "username,platform,followersCount,engagementRate\n"
+            "alpha,Instagram,12000,0.4\n"
+            "beta,YouTube,5000,3.2\n",
+            encoding="utf-8",
+        )
+
+        loan_csv = tmp_path / "loan_approval.csv"
+        loan_csv.write_text(
+            "applicantId,income,loanAmount,creditScore,approvalStatus\n"
+            "L1,7000,15000,760,Approved\n"
+            "L2,0,20000,500,Rejected\n",
+            encoding="utf-8",
+        )
+
+        hiring_csv = tmp_path / "job_applicant.csv"
+        hiring_csv.write_text(
+            "applicantId,name,experienceLevel,skills,applicationStatus\n"
+            "A1,Alice,Senior,\"python;sql;ml\",Shortlisted\n"
+            "A2,Bob,Entry,,Pending\n",
+            encoding="utf-8",
+        )
+
+        r = app_client.post(
+            "/files/scan-csv-schemas",
+            json={
+                "social_media_path": str(social_csv),
+                "loan_approval_path": str(loan_csv),
+                "hiring_applicant_path": str(hiring_csv),
+                "chunk_size": 500,
+            },
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["success"] is True
+        assert data["schemas_scanned"] == 3
+        assert len(data["results"]) == 3
+        assert "## SocialMediaCreator Report" in data["markdown_report"]
+        assert "## LoanApproval Report" in data["markdown_report"]
+        assert "## HiringJobApplicant Report" in data["markdown_report"]
+
+    def test_scan_csv_schemas_missing_file(self, app_client):
+        r = app_client.post(
+            "/files/scan-csv-schemas",
+            json={
+                "social_media_path": "/does/not/exist/social.csv",
+                "loan_approval_path": "/does/not/exist/loan.csv",
+                "hiring_applicant_path": "/does/not/exist/hiring.csv",
+            },
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["success"] is True
+        assert len(data["results"]) == 3
+        assert all("error" in item for item in data["results"])
 
 
 # -----------------------------------------------------------------------------

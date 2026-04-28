@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { api, type DatasetAnalysisResult, type FileInspectionResult, type HiringResponse, type LoanResponse, type SocialResponse } from '../lib/api';
+import { api, type DatasetAnalysisResult, type DatasetRowColumnValue, type FileInspectionResult, type HiringResponse, type LoanResponse, type SocialResponse } from '../lib/api';
 
 type Domain = 'loan' | 'hiring' | 'social';
 
@@ -51,12 +51,26 @@ export interface AutoPredictionSummary {
   timestamp: string;
 }
 
+export interface AutoScanRow {
+  domain: Domain;
+  rowIndex: number;
+  rowNumber: number;
+  id?: string;
+  profile: LoanProfile | HiringProfile | SocialProfile;
+  predictionLabel?: string;
+  confidence?: number;
+  biasRisk?: number;
+  flagged?: boolean;
+  columns?: DatasetRowColumnValue[];
+}
+
 interface ScanState {
   profiles: {
     loan: LoanProfile;
     hiring: HiringProfile;
     social: SocialProfile;
   };
+  scanRows: Partial<Record<Domain, AutoScanRow[]>>;
   inferredDomains: Domain[];
   autoPredictions: Partial<Record<Domain, AutoPredictionSummary>>;
   insights: string[];
@@ -121,6 +135,7 @@ const DEFAULT_STATE: ScanState = {
     hiring: DEFAULT_HIRING,
     social: DEFAULT_SOCIAL,
   },
+  scanRows: {},
   inferredDomains: [],
   autoPredictions: {},
   insights: [],
@@ -294,6 +309,7 @@ function loadInitialState(): ScanState {
         hiring: normalizeProfile({ ...DEFAULT_HIRING, ...(parsed.profiles?.hiring ?? {}) }),
         social: normalizeProfile({ ...DEFAULT_SOCIAL, ...(parsed.profiles?.social ?? {}) }),
       },
+      scanRows: parsed.scanRows ?? {},
     };
   } catch {
     return DEFAULT_STATE;
@@ -408,6 +424,9 @@ export function ScanProvider({ children }: { children: React.ReactNode }) {
       hiring: { ...state.profiles.hiring },
       social: { ...state.profiles.social },
     };
+    let nextScanRows: Partial<Record<Domain, AutoScanRow[]>> = {
+      ...state.scanRows,
+    };
 
     for (const inspection of inspections) {
       const domain = inspection.inferred_domain;
@@ -448,6 +467,42 @@ export function ScanProvider({ children }: { children: React.ReactNode }) {
         ...nextProfiles,
         [domain]: mergeRecord(nextProfiles[domain], normalizedPatch),
       };
+
+      const rowResults = result.results ?? result.results_preview ?? [];
+      if (rowResults.length > 0) {
+        nextScanRows = {
+          ...nextScanRows,
+          [domain]: rowResults.map((row, index) => {
+            const rawInputs = row.inputs ?? {};
+            const normalizedInputs = Object.fromEntries(
+              Object.entries(rawInputs).map(([key, value]) => [
+                key,
+                typeof value === 'string' || typeof value === 'number'
+                  ? normalizeSuggestedValue(key, value)
+                  : value,
+              ])
+            );
+            const profile = normalizeProfile(
+              mergeRecord(
+                defaultProfileForDomain(domain) as unknown as Record<string, unknown>,
+                normalizedInputs
+              )
+            ) as unknown as LoanProfile | HiringProfile | SocialProfile;
+            return {
+              domain,
+              rowIndex: index,
+              rowNumber: row.row,
+              id: row.id,
+              profile,
+              predictionLabel: row.prediction_label,
+              confidence: row.confidence,
+              biasRisk: row.bias_risk_score,
+              flagged: row.flagged,
+              columns: row.columns,
+            };
+          }),
+        };
+      }
     }
 
     nextProfiles = {
@@ -459,6 +514,7 @@ export function ScanProvider({ children }: { children: React.ReactNode }) {
     const inferredList = Array.from(inferredDomains);
     const nextState: ScanState = {
       profiles: nextProfiles,
+      scanRows: nextScanRows,
       inferredDomains: inferredList.length ? inferredList : state.inferredDomains,
       autoPredictions: state.autoPredictions,
       insights: insights.length ? insights : state.insights,
@@ -471,7 +527,7 @@ export function ScanProvider({ children }: { children: React.ReactNode }) {
     }));
 
     await runAutoPredictions(nextProfiles, inferredList);
-  }, [runAutoPredictions, state.autoPredictions, state.insights, state.inferredDomains, state.profiles]);
+  }, [runAutoPredictions, state.autoPredictions, state.insights, state.inferredDomains, state.profiles, state.scanRows]);
 
   const resetProfiles = useCallback(() => {
     predictionSignatureRef.current = {};

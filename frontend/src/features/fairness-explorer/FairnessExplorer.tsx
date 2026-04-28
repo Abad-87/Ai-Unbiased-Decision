@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import { api } from '../../lib/api';
 import type { HiringResponse, LoanResponse, SocialResponse } from '../../lib/api';
 import { FeedbackForm } from '../../components/FeedbackForm';
-import { useScanContext } from '../../components/ScanProvider';
+import { useScanContext, type AutoScanRow } from '../../components/ScanProvider';
 
 type Domain = 'loan' | 'hiring' | 'social';
 
@@ -142,8 +142,13 @@ interface FairnessExplorerProps {
 }
 
 export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
-  const { profiles, inferredDomains, lastUpdated } = useScanContext();
+  const { profiles, inferredDomains, lastUpdated, scanRows } = useScanContext();
   const [activeDomain, setActiveDomain] = useState<Domain>('loan');
+  const [selectedRowByDomain, setSelectedRowByDomain] = useState<Record<Domain, number>>({
+    loan: 0,
+    hiring: 0,
+    social: 0,
+  });
   const lastAutoPredictionKeyRef = useRef<string>('');
   
   // Form states
@@ -158,19 +163,43 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
   const [shapExplanation, setShapExplanation] = useState<string | null>(null);
   const [shapLoading, setShapLoading] = useState(false);
 
+  const activeRows = scanRows[activeDomain] ?? [];
+  const selectedActiveRowIndex = Math.min(
+    selectedRowByDomain[activeDomain] ?? 0,
+    Math.max(0, activeRows.length - 1)
+  );
+  const selectedActiveRow = activeRows[selectedActiveRowIndex];
+  const selectedLoanRow = scanRows.loan?.[
+    Math.min(selectedRowByDomain.loan ?? 0, Math.max(0, (scanRows.loan?.length ?? 0) - 1))
+  ];
+  const selectedHiringRow = scanRows.hiring?.[
+    Math.min(selectedRowByDomain.hiring ?? 0, Math.max(0, (scanRows.hiring?.length ?? 0) - 1))
+  ];
+  const selectedSocialRow = scanRows.social?.[
+    Math.min(selectedRowByDomain.social ?? 0, Math.max(0, (scanRows.social?.length ?? 0) - 1))
+  ];
+
   useEffect(() => {
-    setLoanForm(profiles.loan);
-    setHiringForm(profiles.hiring);
-    setSocialForm(profiles.social);
+    setLoanForm((selectedLoanRow?.profile ?? profiles.loan) as LoanForm);
+    setHiringForm((selectedHiringRow?.profile ?? profiles.hiring) as HiringForm);
+    setSocialForm((selectedSocialRow?.profile ?? profiles.social) as SocialForm);
     if (inferredDomains.length > 0) {
       setActiveDomain(inferredDomains[0]);
     }
-  }, [profiles, inferredDomains, lastUpdated]);
+  }, [profiles, inferredDomains, lastUpdated, selectedLoanRow, selectedHiringRow, selectedSocialRow]);
+
+  useEffect(() => {
+    setSelectedRowByDomain((prev) => ({
+      loan: Math.min(prev.loan, Math.max(0, (scanRows.loan?.length ?? 1) - 1)),
+      hiring: Math.min(prev.hiring, Math.max(0, (scanRows.hiring?.length ?? 1) - 1)),
+      social: Math.min(prev.social, Math.max(0, (scanRows.social?.length ?? 1) - 1)),
+    }));
+  }, [scanRows.loan?.length, scanRows.hiring?.length, scanRows.social?.length]);
 
   const formsSyncedWithProfiles =
-    JSON.stringify(loanForm) === JSON.stringify(profiles.loan) &&
-    JSON.stringify(hiringForm) === JSON.stringify(profiles.hiring) &&
-    JSON.stringify(socialForm) === JSON.stringify(profiles.social);
+    JSON.stringify(loanForm) === JSON.stringify((selectedLoanRow?.profile ?? profiles.loan)) &&
+    JSON.stringify(hiringForm) === JSON.stringify((selectedHiringRow?.profile ?? profiles.hiring)) &&
+    JSON.stringify(socialForm) === JSON.stringify((selectedSocialRow?.profile ?? profiles.social));
 
   // Fetch SHAP when result changes
   useEffect(() => {
@@ -283,12 +312,13 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
     const triggerSeed = `${autoRunToken}:${lastUpdated}`;
     const activeProfileSignature = JSON.stringify(
       activeDomain === 'loan'
-        ? profiles.loan
+        ? (selectedLoanRow?.profile ?? profiles.loan)
         : activeDomain === 'hiring'
-          ? profiles.hiring
-          : profiles.social
+          ? (selectedHiringRow?.profile ?? profiles.hiring)
+          : (selectedSocialRow?.profile ?? profiles.social)
     );
-    const autoKey = `${triggerSeed}:${activeDomain}:${activeProfileSignature}`;
+    const rowKey = selectedActiveRow ? `${selectedActiveRow.id ?? selectedActiveRow.rowIndex}:${selectedActiveRow.rowNumber}` : 'profile';
+    const autoKey = `${triggerSeed}:${activeDomain}:${rowKey}:${activeProfileSignature}`;
     if (lastAutoPredictionKeyRef.current === autoKey) return;
     lastAutoPredictionKeyRef.current = autoKey;
     void handlePredict();
@@ -301,6 +331,10 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
     profiles.loan,
     profiles.hiring,
     profiles.social,
+    selectedLoanRow,
+    selectedHiringRow,
+    selectedSocialRow,
+    selectedActiveRow,
     handlePredict,
   ]);
 
@@ -327,6 +361,17 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
       ? result.explanation
       : [result.explanation]
     : [];
+
+  const handleSelectScanRow = (row: AutoScanRow) => {
+    setSelectedRowByDomain((prev) => ({
+      ...prev,
+      [row.domain]: row.rowIndex,
+    }));
+    setResult(null);
+    setError(null);
+    setShapData(null);
+    setShapExplanation(null);
+  };
 
   const renderLoanForm = () => (
     <fieldset disabled className="space-y-5 opacity-80 pointer-events-none">
@@ -554,6 +599,83 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
           );
         })}
       </div>
+
+      {activeRows.length > 0 && (
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h2 className="font-semibold dark:text-white">Rows From Uploaded Dataset</h2>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                Select a row to run and view its Fairness Explorer analysis separately.
+              </p>
+            </div>
+            <span className="text-xs px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+              {activeRows.length} row{activeRows.length === 1 ? '' : 's'} available
+            </span>
+          </div>
+
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {activeRows.map((row) => {
+              const isActive = row.rowIndex === selectedActiveRowIndex;
+              return (
+                <button
+                  key={`${row.id ?? row.rowNumber}-${row.rowIndex}`}
+                  onClick={() => handleSelectScanRow(row)}
+                  className={`min-w-[210px] text-left rounded-2xl border p-4 transition-all ${
+                    isActive
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950 shadow-sm'
+                      : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 hover:border-zinc-300 dark:hover:border-zinc-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold dark:text-white">Row {row.rowNumber + 1}</span>
+                    {row.flagged && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">
+                        Flagged
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1 truncate">
+                    {row.id ?? `ROW-${row.rowNumber + 1}`}
+                  </p>
+                  {row.predictionLabel && (
+                    <p className="text-sm font-medium text-emerald-600 mt-2">{row.predictionLabel}</p>
+                  )}
+                  {typeof row.confidence === 'number' && (
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Batch confidence {(row.confidence * 100).toFixed(0)}%
+                    </p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {selectedActiveRow?.columns && selectedActiveRow.columns.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+              <div className="bg-zinc-50 dark:bg-zinc-800 px-4 py-2 text-sm font-medium dark:text-white">
+                Selected Row Original Values
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <tbody>
+                    {selectedActiveRow.columns.map((column) => (
+                      <tr key={column.column} className="border-t border-zinc-200 dark:border-zinc-800">
+                        <td className="py-2 px-3 font-medium dark:text-white whitespace-nowrap">{column.column}</td>
+                        <td className="py-2 px-3 text-zinc-600 dark:text-zinc-300">
+                          {column.is_missing || column.value === null || column.value === undefined
+                            ? <span className="text-zinc-400">missing</span>
+                            : String(column.value)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Form Section */}

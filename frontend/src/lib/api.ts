@@ -265,6 +265,7 @@ export interface FileUploadResponse {
   success: boolean;
   message: string;
   file: FileMetadata;
+  analysis?: DatasetAnalysisResult;
 }
 
 export interface FileListResponse {
@@ -414,11 +415,49 @@ export interface DatasetAnalysisResult {
   target_column?: string | null;
   sensitive_columns?: Record<string, string>;
   model?: Record<string, unknown>;
-  results_preview?: Array<Record<string, unknown>>;
+  results?: DatasetRowResult[];
+  results_preview?: DatasetRowResult[];
+  decision_summary_table?: Array<Record<string, unknown>>;
+  detailed_breakdown?: Array<Record<string, unknown>>;
+  column_breakdown?: DatasetColumnBreakdown[];
   suggested_profile?: Record<string, string | number>;
   errors: Array<{ row: number; message: string }>;
   unmapped_columns?: string[];
   error?: string;
+}
+
+export interface DatasetRowColumnValue {
+  column: string;
+  value: unknown;
+  is_missing: boolean;
+}
+
+export interface DatasetRowResult {
+  id?: string;
+  row: number;
+  prediction?: number;
+  prediction_label?: string;
+  confidence?: number;
+  bias_risk_score?: number;
+  flagged?: boolean;
+  ground_truth?: number | null;
+  inputs?: Record<string, unknown>;
+  columns?: DatasetRowColumnValue[];
+  explanation?: string;
+}
+
+export interface DatasetColumnBreakdown {
+  column: string;
+  role: 'prediction_feature' | 'sensitive_attribute' | 'target' | 'unmapped' | string;
+  mapped_feature?: string | null;
+  sensitive_attribute?: string | null;
+  domain: string;
+  dtype: string;
+  missing_count: number;
+  missing_percent: number;
+  unique_count: number;
+  sample_values: string[];
+  numeric_stats?: { min: number; max: number; mean: number } | null;
 }
 
 export interface ShapReport {
@@ -507,15 +546,23 @@ export const api = {
   feedback: (body: FeedbackRequest) =>
     post<FeedbackResponse>("/feedback", body),
 
-  // File Upload (images, PDFs, docs, data files)
+  // File Upload (CSV/JSON datasets only)
   uploadFile: (formData: FormData) => {
     return fetch(`${BASE}/files/upload`, {
       method: "POST",
       body: formData,
     }).then(async (res) => {
       if (!res.ok) {
-        const detail = await res.json().catch(() => ({}));
-        throw new Error(detail.detail || `Upload failed: ${res.status}`);
+        const payload = await res.json().catch(() => ({}));
+        const detail = payload.detail;
+        if (detail && typeof detail === "object") {
+          const typed = detail as { message?: string; missing_attributes?: string[] };
+          const missing = typed.missing_attributes?.length
+            ? ` Missing attributes: ${typed.missing_attributes.join(", ")}.`
+            : "";
+          throw new Error(`${typed.message || `Upload failed: ${res.status}`}${missing}`);
+        }
+        throw new Error(typeof detail === "string" ? detail : `Upload failed: ${res.status}`);
       }
       return res.json() as Promise<FileUploadResponse>;
     });
