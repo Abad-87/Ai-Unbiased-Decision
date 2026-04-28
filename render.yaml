@@ -5,7 +5,7 @@ services:
     rootDir: backend
     region: oregon
     plan: free
-    buildCommand: pip install -r ../requirements.txt && python ../create_dummy_models.py
+    buildCommand: pip install -r requirements.txt && python ../create_dummy_models.py
     # Single worker keeps RAM under the free-tier 512 MB cap while we load
     # three sklearn models. --timeout-keep-alive 30 avoids premature drops.
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1 --timeout-keep-alive 30
@@ -23,15 +23,3 @@ services:
         sync: false
       - key: FRONTEND_ORIGINS
         sync: false
-
-  - type: static_site
-    name: quantum-ai-frontend
-    rootDir: frontend
-    region: oregon
-    plan: free
-    buildCommand: npm install && npm run build
-    publishPath: dist
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
