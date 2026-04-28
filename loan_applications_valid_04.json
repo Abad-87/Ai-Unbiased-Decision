@@ -1,0 +1,32 @@
+[
+  {
+    "applicant_uid": "L301",
+    "monthly_stable_income": 11200,
+    "credit_history_score": 802,
+    "debt_to_income_ratio": 0.16,
+    "employment_stability_years": 10,
+    "existing_loan_count": 0,
+    "collateral_valuation_amount": 80000,
+    "requested_loan_tenure": 24,
+    "payment_default_history": 0,
+    "verified_identity_flag": 1,
+    "residential_status_stability": 1,
+    "bank_statement_analysis_score": 96,
+    "is_eligible_for_loan": 1
+  },
+  {
+    "applicant_uid": "L302",
+    "monthly_stable_income": 4400,
+    "credit_history_score": 620,
+    "debt_to_income_ratio": 0.53,
+    "employment_stability_years": 2,
+    "existing_loan_count": 2,
+    "collateral_valuation_amount": 16000,
+    "requested_loan_tenure": 84,
+    "payment_default_history": 1,
+    "verified_identity_flag": 0,
+    "residential_status_stability": 0,
+    "bank_statement_analysis_score": 55,
+    "is_eligible_for_loan": 0
+  }
+]
