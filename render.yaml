@@ -24,14 +24,3 @@ services:
       - key: FRONTEND_ORIGINS
         sync: false
 
-  - type: static_site
-    name: quantum-ai-frontend
-    rootDir: frontend
-    region: oregon
-    plan: free
-    buildCommand: npm install && npm run build
-    publishPath: dist
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
