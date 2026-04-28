@@ -36,3 +36,20 @@ backend/**/*.json
 predictions.json
 bias_results.json
 logs.json
+
+# Uploads & generated data
+backend/uploads/
+uploads/
+sample_uploads/
+data/*.json
+data/*.csv
+
+# Virtual envs & pid files
+backend/.venv/
+backend/.venv311/
+backend/.venv_live311/
+backend/.uvicorn*
+
+# Local run artifacts
+.local-run/
+frontend/.vite*
