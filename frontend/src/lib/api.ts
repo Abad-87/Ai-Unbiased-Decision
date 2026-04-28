@@ -515,6 +515,9 @@ export interface FullScanResponse {
 
 export const api = {
   // Health
+  livez: () =>
+    get<Record<string, unknown>>("/livez"),
+
   health: () =>
     get<Record<string, unknown>>("/health"),
 

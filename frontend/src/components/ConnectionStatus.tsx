@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 type Status = 'checking' | 'online' | 'offline';
 
 /**
- * Pings the backend /health endpoint on mount and every 30 s.
+ * Pings the backend /livez endpoint on mount and every 30 s.
  * Shows a green pill when the backend is reachable and an expanded
  * red banner (dismissible) when it is not — so wiring issues are
  * obvious immediately.
@@ -17,7 +17,7 @@ export function ConnectionStatus() {
 
   const check = async () => {
     try {
-      await api.health();
+      await api.livez();
       setStatus('online');
       setErrorMsg('');
     } catch (e) {
