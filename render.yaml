@@ -1,7 +1,7 @@
 services:
   - type: web
     name: quantum-ai-backend
-    env: python
+    runtime: python
     rootDir: backend
     region: oregon
     plan: free
