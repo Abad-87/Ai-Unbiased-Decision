@@ -9,7 +9,7 @@
 // Use relative URLs in development (proxied by Vite), full URL in production.
 // Netlify bakes VITE_* values at build time, so keep a production fallback here
 // to avoid accidentally shipping a bundle that calls the frontend origin.
-const DEFAULT_PROD_API_BASE = "https://quantum-ai-backend-rqcz.onrender.com";
+const DEFAULT_PROD_API_BASE = "https://ai-unbiased-decision.onrender.com";
 const BASE =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
   (import.meta.env.PROD ? DEFAULT_PROD_API_BASE : "");
