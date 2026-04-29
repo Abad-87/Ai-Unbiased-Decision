@@ -180,6 +180,7 @@ export function HiringPrediction() {
                     max="50"
                     step="0.5"
                     value={formData.years_experience}
+                    onChange={(e) => setFormData({ ...formData, years_experience: parseFloat(e.target.value) })}
                     className="flex-1 accent-emerald-600"
                   />
                   <span className="w-16 text-right font-medium dark:text-white">
@@ -195,6 +196,7 @@ export function HiringPrediction() {
                 </label>
                 <select
                   value={formData.education_level}
+                  onChange={(e) => setFormData({ ...formData, education_level: parseInt(e.target.value) })}
                   className="w-full bg-zinc-100 dark:bg-zinc-800 border border-transparent focus:border-emerald-500 rounded-xl px-4 py-3 dark:text-white"
                 >
                   {EDUCATION_LEVELS.map(level => (
@@ -215,6 +217,7 @@ export function HiringPrediction() {
                     max="100"
                     step="1"
                     value={formData.technical_score}
+                    onChange={(e) => setFormData({ ...formData, technical_score: parseInt(e.target.value) })}
                     className="flex-1 accent-emerald-600"
                   />
                   <span className="w-16 text-right font-medium dark:text-white">
@@ -235,6 +238,7 @@ export function HiringPrediction() {
                     max="100"
                     step="1"
                     value={formData.communication_score}
+                    onChange={(e) => setFormData({ ...formData, communication_score: parseInt(e.target.value) })}
                     className="flex-1 accent-emerald-600"
                   />
                   <span className="w-16 text-right font-medium dark:text-white">
@@ -255,6 +259,7 @@ export function HiringPrediction() {
                     max="30"
                     step="1"
                     value={formData.num_past_jobs}
+                    onChange={(e) => setFormData({ ...formData, num_past_jobs: parseInt(e.target.value) })}
                     className="flex-1 accent-emerald-600"
                   />
                   <span className="w-16 text-right font-medium dark:text-white">
@@ -275,6 +280,7 @@ export function HiringPrediction() {
                     max="20"
                     step="1"
                     value={formData.certifications}
+                    onChange={(e) => setFormData({ ...formData, certifications: parseInt(e.target.value) })}
                     className="flex-1 accent-emerald-600"
                   />
                   <span className="w-16 text-right font-medium dark:text-white">
@@ -301,6 +307,7 @@ export function HiringPrediction() {
                 <input
                   type="text"
                   value={formData.gender}
+                  onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                   placeholder="e.g., male, female, non-binary"
                   className="w-full bg-zinc-100 dark:bg-zinc-800 border border-transparent focus:border-emerald-500 rounded-xl px-4 py-3 dark:text-white"
                 />
@@ -310,6 +317,7 @@ export function HiringPrediction() {
                 <input
                   type="text"
                   value={formData.religion}
+                  onChange={(e) => setFormData({ ...formData, religion: e.target.value })}
                   placeholder="e.g., christian, muslim, hindu"
                   className="w-full bg-zinc-100 dark:bg-zinc-800 border border-transparent focus:border-emerald-500 rounded-xl px-4 py-3 dark:text-white"
                 />
@@ -319,6 +327,7 @@ export function HiringPrediction() {
                 <input
                   type="text"
                   value={formData.ethnicity}
+                  onChange={(e) => setFormData({ ...formData, ethnicity: e.target.value })}
                   placeholder="e.g., asian, caucasian, african"
                   className="w-full bg-zinc-100 dark:bg-zinc-800 border border-transparent focus:border-emerald-500 rounded-xl px-4 py-3 dark:text-white"
                 />

@@ -1,54 +1,34 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+
+const proxyTarget = process.env.VITE_PROXY_TARGET || 'http://localhost:8000';
+
+const proxiedPaths = [
+  '/health',
+  '/livez',
+  '/hiring',
+  '/loan',
+  '/social',
+  '/feedback',
+  '/insights',
+  '/files',
+  '/mitigation',
+  '/shap',
+  '/models',
+];
 
 export default defineConfig({
-  plugins: [
-    react(),
-    tailwindcss(),        // ← This enables Tailwind v4
-  ],
+  plugins: [react(), tailwindcss()],
   server: {
-    proxy: {
-      '/health': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/hiring': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/loan': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/social': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/feedback': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/insights': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/files': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/mitigation': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/shap': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/models': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-    },
+    proxy: Object.fromEntries(
+      proxiedPaths.map((path) => [
+        path,
+        {
+          target: proxyTarget,
+          changeOrigin: true,
+        },
+      ])
+    ),
   },
-})
+});

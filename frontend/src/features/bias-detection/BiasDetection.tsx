@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Target, Play, AlertTriangle, Briefcase, DollarSign, Share2, Loader2 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { api } from '../../lib/api';
 import type { FullScanResponse, SummaryResponse } from '../../lib/api';
 import { useScanContext } from '../../components/ScanProvider';
+import { loadFairnessSettings } from '../../lib/fairnessSettings';
 
 type Domain = 'loan' | 'hiring' | 'social';
 
@@ -41,6 +42,7 @@ export function BiasDetection({ refreshKey = 0, onScanComplete }: BiasDetectionP
   const [isScanning, setIsScanning] = useState(false);
   const [liveData, setLiveData] = useState<SummaryResponse | null>(null);
   const [scanResult, setScanResult] = useState<FullScanResponse | null>(null);
+  const [settings] = useState(() => loadFairnessSettings());
 
   useEffect(() => {
     api.getSummary(activeDomain).then(setLiveData).catch(() => setLiveData(null));
@@ -85,7 +87,7 @@ export function BiasDetection({ refreshKey = 0, onScanComplete }: BiasDetectionP
     { name: 'Biased', value: 100 - fairPct, color: '#ef4444' },
   ];
 
-  const highBias = metricsData.find(m => m.parityGap > 0.15);
+  const highBias = metricsData.find(m => m.parityGap > settings.threshold);
   const activeDomainConfig = DOMAINS.find(d => d.id === activeDomain);
   const scoreTiles = scanResult?.scores
     ? [
@@ -201,7 +203,7 @@ export function BiasDetection({ refreshKey = 0, onScanComplete }: BiasDetectionP
             <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-3">
               Acceptable Threshold
             </label>
-            <div className="text-4xl font-semibold dark:text-white">0.20</div>
+            <div className="text-4xl font-semibold dark:text-white">{settings.threshold.toFixed(2)}</div>
             <p className="text-xs text-zinc-500 mt-1">Maximum allowed disparity</p>
           </div>
         </div>
@@ -279,14 +281,14 @@ export function BiasDetection({ refreshKey = 0, onScanComplete }: BiasDetectionP
           {/* Approval Rate Chart */}
           <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
             <h2 className="text-xl font-semibold mb-6 dark:text-white">Approval Rate by Group</h2>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={metricsData}>
+            <div className="w-full overflow-x-auto">
+              <BarChart width={560} height={280} data={metricsData}>
                 <XAxis dataKey="group" tick={{ fill: '#71717a' }} />
                 <YAxis />
                 <Tooltip />
                 <Bar dataKey="approval" radius={12} fill="#10b981" />
               </BarChart>
-            </ResponsiveContainer>
+            </div>
           </div>
 
           {/* Bias Distribution */}
@@ -294,8 +296,7 @@ export function BiasDetection({ refreshKey = 0, onScanComplete }: BiasDetectionP
             <h2 className="text-xl font-semibold mb-6 dark:text-white">Overall Bias Distribution</h2>
             <div className="flex justify-center">
               <div className="w-64 h-64">
-                <ResponsiveContainer>
-                  <PieChart>
+                  <PieChart width={256} height={256}>
                     <Pie
                       data={pieData}
                       cx="50%"
@@ -310,7 +311,6 @@ export function BiasDetection({ refreshKey = 0, onScanComplete }: BiasDetectionP
                     </Pie>
                     <Tooltip />
                   </PieChart>
-                </ResponsiveContainer>
               </div>
             </div>
           </div>
@@ -335,7 +335,7 @@ export function BiasDetection({ refreshKey = 0, onScanComplete }: BiasDetectionP
           <div>
             <h3 className="font-semibold text-emerald-800 dark:text-emerald-400">No High Bias Detected</h3>
             <p className="text-emerald-700 dark:text-emerald-300 mt-2">
-              All groups in {activeDomainConfig?.label} model are within the acceptable parity threshold (0.20). Run a scan to refresh.
+              All groups in {activeDomainConfig?.label} model are within the acceptable parity threshold ({settings.threshold.toFixed(2)}). Run a scan to refresh.
             </p>
           </div>
         </div>

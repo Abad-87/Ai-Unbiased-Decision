@@ -20,6 +20,9 @@ from pydantic import BaseModel, Field
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "./uploads"))
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "100"))
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+UPLOAD_WRITE_CHUNK_BYTES = int(os.getenv("UPLOAD_WRITE_CHUNK_BYTES", str(1024 * 1024)))
+UPLOAD_SCHEMA_SAMPLE_ROWS = int(os.getenv("UPLOAD_SCHEMA_SAMPLE_ROWS", "250"))
+AUTO_UPLOAD_ANALYSIS_ROWS = int(os.getenv("AUTO_UPLOAD_ANALYSIS_ROWS", "1000"))
 
 # Only CSV and JSON datasets may be uploaded.
 ALLOWED_EXTENSIONS = {".csv", ".json"}
@@ -134,12 +137,19 @@ def validate_file(file: UploadFile) -> tuple[bool, str]:
         allowed_list = ", ".join(sorted(ALLOWED_EXTENSIONS))
         return False, f"File type '{ext}' not allowed. Only CSV and JSON files are allowed: {allowed_list}"
     
-    # Check file size (read first chunk)
-    contents = file.file.read(MAX_FILE_SIZE_BYTES + 1)
-    file.file.seek(0)
-    
-    if len(contents) > MAX_FILE_SIZE_BYTES:
-        return False, f"File too large. Max size: {MAX_FILE_SIZE_MB}MB"
+    try:
+        current_pos = file.file.tell()
+        file.file.seek(0, os.SEEK_END)
+        size = file.file.tell()
+        file.file.seek(current_pos)
+        if size > MAX_FILE_SIZE_BYTES:
+            return False, f"File too large. Max size: {MAX_FILE_SIZE_MB}MB"
+    except Exception:
+        current_pos = file.file.tell()
+        contents = file.file.read(MAX_FILE_SIZE_BYTES + 1)
+        file.file.seek(current_pos)
+        if len(contents) > MAX_FILE_SIZE_BYTES:
+            return False, f"File too large. Max size: {MAX_FILE_SIZE_MB}MB"
     
     return True, ""
 
@@ -168,11 +178,14 @@ async def upload_file(
     stored_name = f"{file_id}_data{ext}"
     file_path = UPLOAD_DIR / stored_name
     
-    # Save file
+    # Save file without loading the whole upload into memory.
     try:
-        contents = await file.read()
         with open(file_path, "wb") as f:
-            f.write(contents)
+            while True:
+                chunk = await file.read(UPLOAD_WRITE_CHUNK_BYTES)
+                if not chunk:
+                    break
+                f.write(chunk)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
     finally:
@@ -185,7 +198,7 @@ async def upload_file(
             validate_upload_attributes,
         )
 
-        df = read_tabular_file(file_path, ext)
+        df = read_tabular_file(file_path, ext, max_rows=UPLOAD_SCHEMA_SAMPLE_ROWS)
         schema_validation = validate_upload_attributes(df, requested_domain=domain)
         if not schema_validation["is_valid"]:
             file_path.unlink(missing_ok=True)
@@ -211,7 +224,7 @@ async def upload_file(
         raise HTTPException(status_code=400, detail=f"Failed to read CSV/JSON dataset: {str(e)}")
     
     # Build metadata
-    size_bytes = len(contents)
+    size_bytes = file_path.stat().st_size
     metadata = FileMetadata(
         id=file_id,
         filename=file.filename,
@@ -235,7 +248,11 @@ async def upload_file(
         json.dump(metadata.model_dump(), f, indent=2)
 
     try:
-        analysis = await analyze_uploaded_file(file_id, UPLOAD_DIR)
+        analysis = await analyze_uploaded_file(
+            file_id,
+            UPLOAD_DIR,
+            max_rows=AUTO_UPLOAD_ANALYSIS_ROWS,
+        )
     except Exception as e:
         file_path.unlink(missing_ok=True)
         meta_path.unlink(missing_ok=True)
@@ -541,7 +558,11 @@ async def scan_files(body: ScanRequest = Body(default_factory=ScanRequest)):
 
         file_path = UPLOAD_DIR / candidate["stored_name"]
         try:
-            df = read_tabular_file(file_path, candidate["extension"])
+            df = read_tabular_file(
+                file_path,
+                candidate["extension"],
+                max_rows=UPLOAD_SCHEMA_SAMPLE_ROWS,
+            )
             inferred_domain, _, _ = detect_domain(df)
         except Exception:
             inferred_domain = None

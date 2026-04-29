@@ -162,6 +162,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
   const [shapData, setShapData] = useState<Record<string, number> | null>(null);
   const [shapExplanation, setShapExplanation] = useState<string | null>(null);
   const [shapLoading, setShapLoading] = useState(false);
+  const [rowRunToken, setRowRunToken] = useState(0);
 
   const activeRows = scanRows[activeDomain] ?? [];
   const selectedActiveRowIndex = Math.min(
@@ -183,10 +184,14 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
     setLoanForm((selectedLoanRow?.profile ?? profiles.loan) as LoanForm);
     setHiringForm((selectedHiringRow?.profile ?? profiles.hiring) as HiringForm);
     setSocialForm((selectedSocialRow?.profile ?? profiles.social) as SocialForm);
-    if (inferredDomains.length > 0) {
-      setActiveDomain(inferredDomains[0]);
-    }
   }, [profiles, inferredDomains, lastUpdated, selectedLoanRow, selectedHiringRow, selectedSocialRow]);
+
+  useEffect(() => {
+    if (inferredDomains.length === 0) return;
+    setActiveDomain((current) => (
+      inferredDomains.includes(current) ? current : inferredDomains[0]
+    ));
+  }, [inferredDomains]);
 
   useEffect(() => {
     setSelectedRowByDomain((prev) => ({
@@ -205,12 +210,14 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
   useEffect(() => {
     const shapPollUrl = result?.shap_poll_url;
     if (!shapPollUrl) return;
-    
+    let cancelled = false;
+
     const fetchShap = async () => {
       setShapLoading(true);
       try {
         for (let attempt = 0; attempt < 10; attempt += 1) {
           const data = await api.getShapReport(shapPollUrl);
+          if (cancelled) return;
           if (data.shap_report?.shap_values) {
             setShapData(data.shap_report.shap_values);
           }
@@ -225,11 +232,16 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
       } catch {
         // SHAP fetch is optional
       } finally {
-        setShapLoading(false);
+        if (!cancelled) {
+          setShapLoading(false);
+        }
       }
     };
-    
+
     fetchShap();
+    return () => {
+      cancelled = true;
+    };
   }, [result?.shap_poll_url]);
 
   const handlePredict = useCallback(async () => {
@@ -309,7 +321,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
 
     if (!lastUpdated) return;
 
-    const triggerSeed = `${autoRunToken}:${lastUpdated}`;
+    const triggerSeed = `${autoRunToken}:${lastUpdated}:${rowRunToken}`;
     const activeProfileSignature = JSON.stringify(
       activeDomain === 'loan'
         ? (selectedLoanRow?.profile ?? profiles.loan)
@@ -325,6 +337,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
   }, [
     autoRunToken,
     lastUpdated,
+    rowRunToken,
     formsSyncedWithProfiles,
     isLoading,
     activeDomain,
@@ -356,10 +369,11 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
         impact: Math.abs(value),
       })).sort((a, b) => b.impact - a.impact).slice(0, 10)
     : [];
-  const explanationItems = result?.explanation
-    ? Array.isArray(result.explanation)
-      ? result.explanation
-      : [result.explanation]
+  const displayExplanation = shapData && shapExplanation ? shapExplanation : result?.explanation;
+  const explanationItems = displayExplanation
+    ? Array.isArray(displayExplanation)
+      ? displayExplanation
+      : [displayExplanation]
     : [];
 
   const handleSelectScanRow = (row: AutoScanRow) => {
@@ -367,6 +381,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
       ...prev,
       [row.domain]: row.rowIndex,
     }));
+    setRowRunToken((token) => token + 1);
     setResult(null);
     setError(null);
     setShapData(null);
@@ -628,7 +643,7 @@ export function FairnessExplorer({ autoRunToken = 0 }: FairnessExplorerProps) {
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold dark:text-white">Row {row.rowNumber + 1}</span>
+                    <span className="font-semibold dark:text-white">Row {row.rowIndex + 1}</span>
                     {row.flagged && (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">
                         Flagged

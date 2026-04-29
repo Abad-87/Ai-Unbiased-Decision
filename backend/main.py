@@ -58,6 +58,11 @@ _RUNNING_TESTS = ("pytest" in sys.modules) or bool(os.getenv("PYTEST_CURRENT_TES
 if not _RUNNING_TESTS:
     load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=False)
 MONGO_URL = os.getenv("MONGO_URL")
+FIREBASE_CONFIGURED = bool(
+    os.getenv("FIREBASE_PROJECT_ID")
+    or os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH")
+    or os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+)
 
 def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name, str(default))
@@ -116,6 +121,8 @@ def _parse_frontend_origins() -> list[str]:
     return [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
         "http://localhost:4173",
         "http://127.0.0.1:4173",
     ]
@@ -172,12 +179,12 @@ async def _background_warmup() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("=== Quantum startup (Phase 4) ===")
-    if not MONGO_URL and not _RUNNING_TESTS:
+    if not FIREBASE_CONFIGURED and not MONGO_URL and not _RUNNING_TESTS:
         logger.warning(
-            "MONGO_URL not set — persistence will use the JSON fallback "
+            "No Firebase or MONGO_URL configuration found — persistence will use the JSON fallback "
             "(predictions.json). This is OK for demos but NOT recommended for "
-            "production traffic. Set MONGO_URL in the Render dashboard to "
-            "enable MongoDB-backed auditing."
+            "production traffic. Configure Firebase Firestore or set MONGO_URL "
+            "to enable cloud-backed auditing."
         )
 
     # Fire-and-forget warmup so uvicorn can start accepting requests (and

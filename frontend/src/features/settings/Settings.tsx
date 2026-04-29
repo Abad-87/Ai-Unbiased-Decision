@@ -1,27 +1,39 @@
 import { Settings as SettingsIcon, Shield, Users, Save, Moon, Sun, Palette } from 'lucide-react';
 import { useState } from 'react';
 import { useTheme } from '../../components/ThemeProvider';
+import { loadFairnessSettings, saveFairnessSettings } from '../../lib/fairnessSettings';
 
 export function Settings() {
-  const [protectedAttributes, setProtectedAttributes] = useState([
-    { name: 'Gender', enabled: true },
-    { name: 'Age Group', enabled: true },
-    { name: 'Region', enabled: false },
-    { name: 'Income Bracket', enabled: false },
-  ]);
-
-  const [threshold, setThreshold] = useState(0.20);
-  const [autoMitigation, setAutoMitigation] = useState(true);
+  const [settings, setSettings] = useState(() => loadFairnessSettings());
+  const [saved, setSaved] = useState(false);
   const { theme, toggleTheme } = useTheme();
 
+  const persist = (next: typeof settings) => {
+    setSettings(next);
+    saveFairnessSettings(next);
+    setSaved(false);
+  };
+
   const toggleAttribute = (index: number) => {
-    const updated = [...protectedAttributes];
-    updated[index].enabled = !updated[index].enabled;
-    setProtectedAttributes(updated);
+    persist({
+      ...settings,
+      protectedAttributes: settings.protectedAttributes.map((attr, attrIndex) =>
+        attrIndex === index ? { ...attr, enabled: !attr.enabled } : attr
+      ),
+    });
+  };
+
+  const updateThreshold = (value: number) => {
+    persist({ ...settings, threshold: Number(value.toFixed(2)) });
+  };
+
+  const toggleAutoMitigation = () => {
+    persist({ ...settings, autoMitigation: !settings.autoMitigation });
   };
 
   const saveSettings = () => {
-    alert("✅ Settings saved successfully!");
+    saveFairnessSettings(settings);
+    setSaved(true);
   };
 
   return (
@@ -36,7 +48,6 @@ export function Settings() {
         </p>
       </div>
 
-      {/* Appearance — Black Mode / White Mode */}
       <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
         <div className="flex items-center gap-3 mb-6">
           <Palette className="text-emerald-600" size={24} />
@@ -44,9 +55,8 @@ export function Settings() {
         </div>
 
         <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-5">
-          Switch between <strong>White Mode</strong> (light) and <strong>Black Mode</strong> (dark).
-          All text, backgrounds, buttons, cards, and UI elements adjust automatically for
-          readability and contrast.
+          Switch between <strong>White Mode</strong> and <strong>Black Mode</strong>.
+          All text, backgrounds, buttons, cards, and UI elements adjust automatically for readability and contrast.
         </p>
 
         <div className="grid grid-cols-2 gap-4">
@@ -100,7 +110,6 @@ export function Settings() {
         </p>
       </div>
 
-      {/* Protected Attributes */}
       <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
         <div className="flex items-center gap-3 mb-6">
           <Shield className="text-emerald-600" size={24} />
@@ -108,8 +117,8 @@ export function Settings() {
         </div>
 
         <div className="space-y-4">
-          {protectedAttributes.map((attr, index) => (
-            <div key={index} className="flex items-center justify-between p-5 bg-zinc-50 dark:bg-zinc-800 rounded-2xl">
+          {settings.protectedAttributes.map((attr, index) => (
+            <div key={attr.id} className="flex items-center justify-between p-5 bg-zinc-50 dark:bg-zinc-800 rounded-2xl">
               <div className="flex items-center gap-4">
                 <Users className="text-zinc-500" size={22} />
                 <div>
@@ -120,8 +129,8 @@ export function Settings() {
               <button
                 onClick={() => toggleAttribute(index)}
                 className={`px-6 py-2 rounded-2xl text-sm font-medium transition-all ${
-                  attr.enabled 
-                    ? 'bg-emerald-600 text-white' 
+                  attr.enabled
+                    ? 'bg-emerald-600 text-white'
                     : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300'
                 }`}
               >
@@ -132,10 +141,8 @@ export function Settings() {
         </div>
       </div>
 
-      {/* Fairness Threshold */}
       <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
         <h2 className="text-xl font-semibold mb-6 dark:text-white">Fairness Threshold</h2>
-        
         <div className="flex items-center gap-8">
           <div className="flex-1">
             <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-3">
@@ -147,12 +154,12 @@ export function Settings() {
                 min="0.05"
                 max="0.50"
                 step="0.01"
-                value={threshold}
-                onChange={(e) => setThreshold(parseFloat(e.target.value))}
+                value={settings.threshold}
+                onChange={(e) => updateThreshold(parseFloat(e.target.value))}
                 className="flex-1 accent-emerald-600"
               />
               <div className="font-mono text-2xl font-semibold w-20 text-emerald-600">
-                {threshold}
+                {settings.threshold.toFixed(2)}
               </div>
             </div>
             <p className="text-xs text-zinc-500 mt-2">Lower value = stricter fairness requirements</p>
@@ -160,7 +167,6 @@ export function Settings() {
         </div>
       </div>
 
-      {/* Auto Mitigation */}
       <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800">
         <div className="flex items-center justify-between">
           <div>
@@ -170,26 +176,25 @@ export function Settings() {
             </p>
           </div>
           <button
-            onClick={() => setAutoMitigation(!autoMitigation)}
+            onClick={toggleAutoMitigation}
             className={`px-8 py-3 rounded-2xl font-medium transition-all ${
-              autoMitigation 
-                ? 'bg-emerald-600 text-white' 
+              settings.autoMitigation
+                ? 'bg-emerald-600 text-white'
                 : 'bg-zinc-200 dark:bg-zinc-700'
             }`}
           >
-            {autoMitigation ? 'Enabled' : 'Disabled'}
+            {settings.autoMitigation ? 'Enabled' : 'Disabled'}
           </button>
         </div>
       </div>
 
-      {/* Save Button */}
       <div className="flex justify-end">
         <button
           onClick={saveSettings}
           className="flex items-center gap-3 px-10 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-2xl transition-all"
         >
           <Save size={20} />
-          Save Settings
+          {saved ? 'Settings Saved' : 'Save Settings'}
         </button>
       </div>
     </div>

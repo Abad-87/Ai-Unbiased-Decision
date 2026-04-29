@@ -59,7 +59,7 @@ def predict(
         domain         = domain,
     )
 
-    explanation = _rule_based_explanation(features, prediction)
+    explanation = _plain_language_explanation(features, prediction)
 
     return {
         "prediction":     prediction,
@@ -111,6 +111,40 @@ def _rule_based_explanation(features: dict, prediction: int) -> str:
     if emp_years  < 1:  issues.append("less than 1 year of employment history")
     reason = "; ".join(issues) or "does not meet lending criteria"
     return f"Loan rejected — {reason}. (Full SHAP explanation pending)"
+
+
+def _plain_language_explanation(features: dict, prediction: int) -> str:
+    credit    = features.get("credit_score", 0)
+    income    = features.get("annual_income", 1) or 1
+    debt      = features.get("existing_debt", 0)
+    loan_amt  = features.get("loan_amount", 0)
+    emp_years = features.get("employment_years", 0)
+
+    dti = round(debt / income, 3)
+    lti = round(loan_amt / income, 3)
+
+    if prediction == 1:
+        factors = []
+        if credit >= 700:
+            factors.append(f"a strong credit score ({credit})")
+        if dti < 0.4:
+            factors.append(f"a manageable debt-to-income ratio ({dti:.0%})")
+        if emp_years >= 2:
+            factors.append(f"{emp_years} years of steady employment")
+        reason = ", ".join(factors) or "the profile meeting the main lending checks"
+        return f"This loan was approved mainly because of {reason}."
+
+    issues = []
+    if credit < 600:
+        issues.append(f"a low credit score ({credit}; 600+ is usually safer)")
+    if dti > 0.5:
+        issues.append(f"a high debt-to-income ratio ({dti:.0%})")
+    if lti > 3:
+        issues.append(f"a large loan request compared with income ({lti:.1f}x income)")
+    if emp_years < 1:
+        issues.append("very limited employment history")
+    reason = "; ".join(issues) or "the application missing the minimum lending signals"
+    return f"This loan was not approved mainly because of {reason}."
 
 
 def _balanced_binary_decision(

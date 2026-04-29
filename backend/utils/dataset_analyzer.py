@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import pickle
+from collections import Counter
 from dataclasses import dataclass
 from difflib import get_close_matches
 from pathlib import Path
@@ -199,7 +200,10 @@ DEFAULT_FEATURE_VALUES: Dict[str, Dict[str, float]] = {
 
 MODEL_EXTENSIONS = {".pkl", ".joblib"}
 DATA_EXTENSIONS = {".csv", ".xlsx", ".xls", ".json", ".parquet", ".ods"}
-SENSITIVE_FIELDS = ["gender", "ethnicity", "religion", "age_group", "age", "location", "language", "region"]
+SENSITIVE_FIELDS = [
+    "gender", "sex", "ethnicity", "race", "religion", "age_group", "age",
+    "location", "language", "region", "disability_status", "veteran_status",
+]
 
 EDUCATION_TEXT_MAP = {
     "high school": 0,
@@ -236,35 +240,92 @@ def normalize_group_value(value: Any) -> str:
     return cleaned if cleaned else "unknown"
 
 
-def read_tabular_file(file_path: Path, extension: str) -> pd.DataFrame:
+def read_tabular_file(file_path: Path, extension: str, max_rows: Optional[int] = None) -> pd.DataFrame:
     extension = extension.lower()
 
     if extension == ".csv":
-        return pd.read_csv(file_path)
+        return pd.read_csv(file_path, nrows=max_rows)
     if extension in (".xlsx", ".xls"):
-        return pd.read_excel(file_path)
+        df = pd.read_excel(file_path)
+        return df.head(max_rows) if max_rows else df
     if extension == ".json":
+        if max_rows:
+            sampled = _read_json_sample(file_path, max_rows)
+            if sampled is not None:
+                return sampled
         try:
             raw = json.loads(file_path.read_text(encoding="utf-8-sig", errors="replace"))
             if isinstance(raw, list):
-                return pd.DataFrame(raw)
+                return pd.DataFrame(raw[:max_rows] if max_rows else raw)
             if isinstance(raw, dict):
                 for candidate in ("data", "records", "items", "rows"):
                     if isinstance(raw.get(candidate), list):
-                        return pd.DataFrame(raw[candidate])
-                return pd.json_normalize(raw)
+                        rows = raw[candidate]
+                        return pd.DataFrame(rows[:max_rows] if max_rows else rows)
+                df = pd.json_normalize(raw)
+                return df.head(max_rows) if max_rows else df
         except Exception:
             pass
         try:
-            return pd.read_json(file_path)
+            df = pd.read_json(file_path)
+            return df.head(max_rows) if max_rows else df
         except ValueError:
-            return pd.read_json(file_path, lines=True)
+            return pd.read_json(file_path, lines=True, nrows=max_rows)
     if extension == ".parquet":
-        return pd.read_parquet(file_path)
+        df = pd.read_parquet(file_path)
+        return df.head(max_rows) if max_rows else df
     if extension == ".ods":
-        return pd.read_excel(file_path, engine="odf")
+        df = pd.read_excel(file_path, engine="odf")
+        return df.head(max_rows) if max_rows else df
 
     raise ValueError(f"Unsupported file extension: {extension}")
+
+
+def _read_json_sample(file_path: Path, max_rows: int) -> Optional[pd.DataFrame]:
+    """Read a small JSON sample without loading large JSON-lines or array files."""
+    try:
+        with open(file_path, "r", encoding="utf-8-sig", errors="replace") as handle:
+            first = handle.read(1)
+            while first and first.isspace():
+                first = handle.read(1)
+            handle.seek(0)
+
+            if first == "[":
+                decoder = json.JSONDecoder()
+                rows: List[Any] = []
+                buffer = handle.read(8192)
+                pos = buffer.find("[") + 1
+                while len(rows) < max_rows:
+                    while pos < len(buffer) and buffer[pos] in " \r\n\t,":
+                        pos += 1
+                    if pos < len(buffer) and buffer[pos] == "]":
+                        break
+                    try:
+                        item, next_pos = decoder.raw_decode(buffer, pos)
+                    except json.JSONDecodeError:
+                        more = handle.read(8192)
+                        if not more:
+                            break
+                        buffer = buffer[pos:] + more
+                        pos = 0
+                        continue
+                    rows.append(item)
+                    pos = next_pos
+                return pd.DataFrame(rows)
+
+            rows = []
+            for line in handle:
+                if len(rows) >= max_rows:
+                    break
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                rows.append(json.loads(stripped))
+            if rows:
+                return pd.DataFrame(rows)
+    except Exception:
+        return None
+    return None
 
 
 def detect_domain(df: pd.DataFrame) -> Tuple[Optional[str], float, Dict[str, str]]:
@@ -1004,6 +1065,9 @@ def _fairness_report(
     max_bias_gap = 0.0
     min_disparate_impact = 1.0
     flagged_attributes = 0
+    social_reference_class = None
+    if domain == "social" and predictions:
+        social_reference_class = Counter(predictions).most_common(1)[0][0]
 
     for attr_name, column_name in sensitive_columns.items():
         groups: Dict[str, Dict[str, Any]] = {}
@@ -1013,7 +1077,10 @@ def _fairness_report(
             groups[group_value]["n"] += 1
             pred_value = int(predictions[pos]) if pos < len(predictions) else 0
             truth_value = int(y_true[pos]) if y_true and pos < len(y_true) else -1
-            groups[group_value]["positive"] += int(pred_value == 1)
+            if domain == "social" and social_reference_class is not None:
+                groups[group_value]["positive"] += int(pred_value == social_reference_class)
+            else:
+                groups[group_value]["positive"] += int(pred_value == 1)
             if truth_value != -1:
                 groups[group_value]["label_pairs"].append((truth_value, pred_value))
 
@@ -1277,7 +1344,11 @@ async def batch_predict(
     rows_total = int(len(working_df))
     rows_predicted = int(len(results))
     rows_failed = int(len(errors))
-    approval_rate = round(sum(predictions) / len(predictions), 4) if predictions else 0.0
+    if domain == "social" and predictions:
+        most_common_count = Counter(predictions).most_common(1)[0][1]
+        approval_rate = round(most_common_count / len(predictions), 4)
+    else:
+        approval_rate = round(sum(1 for value in predictions if int(value) == 1) / len(predictions), 4) if predictions else 0.0
     avg_confidence = round(sum(confidences) / len(confidences), 4) if confidences else 0.0
     high_bias_count = sum(1 for item in results if item["bias_risk_score"] >= 0.5)
     flagged_count = sum(1 for item in results if item["flagged"])
@@ -1369,7 +1440,7 @@ async def analyze_uploaded_file(
         return _invalid_data_response(file_id=file_id, rows_total=0)
 
     try:
-        df = read_tabular_file(file_path, extension)
+        df = read_tabular_file(file_path, extension, max_rows=max_rows)
     except Exception as exc:
         logger.info("Tabular parse failed for %s (%s); returning invalid data.", file_id, exc)
         return _invalid_data_response(file_id=file_id, rows_total=0)

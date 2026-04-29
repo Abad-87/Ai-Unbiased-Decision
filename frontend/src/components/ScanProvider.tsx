@@ -89,6 +89,8 @@ interface ScanContextValue extends ScanState {
 }
 
 const STORAGE_KEY = 'quantum.scan-state.v1';
+const MAX_PERSISTED_SCAN_ROWS_PER_DOMAIN = 60;
+const MAX_PERSISTED_COLUMNS_PER_ROW = 8;
 
 const DEFAULT_LOAN: LoanProfile = {
   credit_score: 720,
@@ -316,12 +318,42 @@ function loadInitialState(): ScanState {
   }
 }
 
+function compactStateForStorage(state: ScanState): ScanState {
+  const compactRows = Object.fromEntries(
+    Object.entries(state.scanRows).map(([domain, rows]) => [
+      domain,
+      (rows ?? []).slice(0, MAX_PERSISTED_SCAN_ROWS_PER_DOMAIN).map((row) => ({
+        ...row,
+        columns: row.columns?.slice(0, MAX_PERSISTED_COLUMNS_PER_ROW),
+      })),
+    ])
+  ) as ScanState['scanRows'];
+
+  return {
+    ...state,
+    scanRows: compactRows,
+  };
+}
+
 export function ScanProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<ScanState>(loadInitialState);
   const predictionSignatureRef = useRef<Record<string, string>>({});
+  const persistTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (persistTimerRef.current != null) {
+      window.clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = window.setTimeout(() => {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(compactStateForStorage(state)));
+      persistTimerRef.current = null;
+    }, 180);
+
+    return () => {
+      if (persistTimerRef.current != null) {
+        window.clearTimeout(persistTimerRef.current);
+      }
+    };
   }, [state]);
 
   const runAutoPredictions = useCallback(async (profiles: ScanState['profiles'], inferredDomains: Domain[]) => {
@@ -437,6 +469,10 @@ export function ScanProvider({ children }: { children: React.ReactNode }) {
           ...nextProfiles,
           [domain]: defaultProfileForDomain(domain),
         };
+        nextScanRows = {
+          ...nextScanRows,
+          [domain]: [],
+        };
         resetDomains.add(domain);
       }
       const normalizedPatch = Object.fromEntries(
@@ -457,6 +493,10 @@ export function ScanProvider({ children }: { children: React.ReactNode }) {
           ...nextProfiles,
           [domain]: defaultProfileForDomain(domain),
         };
+        nextScanRows = {
+          ...nextScanRows,
+          [domain]: [],
+        };
         resetDomains.add(domain);
       }
       const profilePatch = result.scan_result?.profile ?? result.suggested_profile ?? {};
@@ -470,9 +510,13 @@ export function ScanProvider({ children }: { children: React.ReactNode }) {
 
       const rowResults = result.results ?? result.results_preview ?? [];
       if (rowResults.length > 0) {
+        const existingRows = nextScanRows[domain] ?? [];
+        const rowOffset = existingRows.length;
         nextScanRows = {
           ...nextScanRows,
-          [domain]: rowResults.map((row, index) => {
+          [domain]: [
+            ...existingRows,
+            ...rowResults.map((row, index) => {
             const rawInputs = row.inputs ?? {};
             const normalizedInputs = Object.fromEntries(
               Object.entries(rawInputs).map(([key, value]) => [
@@ -490,7 +534,7 @@ export function ScanProvider({ children }: { children: React.ReactNode }) {
             ) as unknown as LoanProfile | HiringProfile | SocialProfile;
             return {
               domain,
-              rowIndex: index,
+              rowIndex: rowOffset + index,
               rowNumber: row.row,
               id: row.id,
               profile,
@@ -501,6 +545,7 @@ export function ScanProvider({ children }: { children: React.ReactNode }) {
               columns: row.columns,
             };
           }),
+          ],
         };
       }
     }

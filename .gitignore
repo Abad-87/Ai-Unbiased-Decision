@@ -32,6 +32,7 @@ backend/logs/
 backend/**/*.jsonl
 
 backend/.env
+backend/secrets/
 backend/**/*.json
 predictions.json
 bias_results.json
@@ -53,3 +54,4 @@ backend/.uvicorn*
 # Local run artifacts
 .local-run/
 frontend/.vite*
+frontend/audit-output/

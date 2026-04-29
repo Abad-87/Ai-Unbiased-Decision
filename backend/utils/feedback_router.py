@@ -22,6 +22,7 @@ Security / privacy
 from __future__ import annotations
 
 import logging
+import asyncio
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -48,6 +49,11 @@ async def submit_feedback(request: Request, body: FeedbackRequest) -> FeedbackRe
     """
     correlation_id = getattr(request.state, "correlation_id", body.correlation_id)
     updated = await update_ground_truth(body.correlation_id, body.ground_truth)
+    for _ in range(5):
+        if updated:
+            break
+        await asyncio.sleep(0.25)
+        updated = await update_ground_truth(body.correlation_id, body.ground_truth)
 
     if not updated:
         logger.warning(

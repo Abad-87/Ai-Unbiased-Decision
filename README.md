@@ -133,7 +133,7 @@ One-click **JSON export** for regulatory submissions. Full ground-truth feedback
                          │
 ┌────────────────────────▼────────────────────────────────────┐
 │                       STORAGE                               │
-│  MongoDB Atlas (predictions + feedback)                     │
+│  Firebase Firestore or MongoDB Atlas (predictions + feedback)│
 │  ↳ Fallback: predictions.json (no-config local dev)         │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -172,7 +172,7 @@ pip install -r requirements.txt
 
 # Configure environment
 cp ../.env.example .env
-# Edit .env — MONGO_URL is optional; leave blank for JSON fallback
+# Edit .env — Firebase or MONGO_URL is optional; leave blank for JSON fallback
 
 # Start the API server
 uvicorn main:app --reload --port 8000
@@ -208,6 +208,9 @@ npm run dev
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `FIREBASE_PROJECT_ID` | *(empty)* | Firebase project ID. Enables Firestore when paired with credentials. |
+| `FIREBASE_SERVICE_ACCOUNT_PATH` | *(empty)* | Path to a Firebase service-account JSON file for local/server use. |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | *(empty)* | Full Firebase service-account JSON string for hosted deployments. |
 | `MONGO_URL` | *(empty)* | MongoDB Atlas connection string. Leave blank to use JSON fallback. |
 | `ENVIRONMENT` | `development` | `development` or `production` |
 | `LOG_LEVEL` | `INFO` | `DEBUG` · `INFO` · `WARNING` · `ERROR` |
@@ -360,7 +363,7 @@ unbiased-ai/
 │   ├── social/                    # Social recommendation domain
 │   ├── fairness/                  # DPD, EOD, disparate impact logic
 │   └── utils/
-│       ├── database.py            # MongoDB + JSON fallback
+│       ├── database.py            # Firebase/MongoDB + JSON fallback
 │       ├── insights_router.py     # /insights/* endpoints
 │       ├── mitigation_router.py   # /mitigation/* endpoints
 │       ├── feedback_router.py     # /feedback endpoint
@@ -401,7 +404,7 @@ unbiased-ai/
 1. Push repo to GitHub
 2. [New Web Service](https://render.com) → connect repo
 3. Render auto-detects `render.yaml` — no config needed
-4. Add env var: `MONGO_URL` (from MongoDB Atlas)
+4. Add Firebase env vars (`FIREBASE_PROJECT_ID` + `FIREBASE_SERVICE_ACCOUNT_JSON`) or `MONGO_URL`
 5. Copy the deployed URL
 
 ### Frontend → Netlify
@@ -442,7 +445,7 @@ CI runs automatically on every push via GitHub Actions (`.github/workflows/backe
 - [x] Real-time mitigation with Before/After comparison
 - [x] Ground-truth feedback loop
 - [x] File manager (CSV, PDF, images, JSON)
-- [x] MongoDB + JSON fallback storage
+- [x] Firebase/MongoDB + JSON fallback storage
 - [ ] Custom dataset upload → auto-train pipeline
 - [ ] PDF audit report generation
 - [ ] Slack / webhook alerts on bias threshold breach

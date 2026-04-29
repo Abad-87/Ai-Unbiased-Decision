@@ -134,6 +134,7 @@ export interface SummaryResponse {
 export interface RecentPrediction {
   correlation_id:        string | null;
   domain:                string;
+  input?:                Record<string, unknown>;
   prediction:            number;
   prediction_label:      string | null;
   confidence:            number;

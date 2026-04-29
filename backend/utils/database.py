@@ -71,9 +71,11 @@ only as an anonymised group label (not linked to an individual record).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -104,8 +106,20 @@ except ImportError:
     MOTOR_AVAILABLE = False
     logger.warning("Motor not installed — using JSON fallback for storage.")
 
+try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore
+    FIREBASE_AVAILABLE = True
+except ImportError:
+    FIREBASE_AVAILABLE = False
+    logger.warning("Firebase Admin SDK not installed — Firebase storage disabled.")
+
 _client: Any = None
 _db: Any = None
+_firestore_db: Any = None
+_firestore_disabled_until: float = 0.0
+FIRESTORE_TIMEOUT_SECONDS = float(os.getenv("FIRESTORE_TIMEOUT_SECONDS", "3.0"))
+FIRESTORE_CIRCUIT_BREAK_SECONDS = float(os.getenv("FIRESTORE_CIRCUIT_BREAK_SECONDS", "120.0"))
 
 # ═════════════════════════════════════════════════════════════════════════════
 # PUBLIC: PRE-PROCESSING PIPELINE
@@ -202,6 +216,106 @@ async def preprocess_features(
 # PUBLIC: DATABASE OPERATIONS
 # ═════════════════════════════════════════════════════════════════════════════
 
+def get_firestore_database() -> Any:
+    """
+    Return a Firestore client when Firebase Admin credentials are configured.
+
+    Supported env vars:
+    - FIREBASE_SERVICE_ACCOUNT_PATH: path to a downloaded service account JSON.
+    - FIREBASE_SERVICE_ACCOUNT_JSON: full service account JSON string.
+    - FIREBASE_PROJECT_ID: project ID for Application Default Credentials.
+    """
+    global _firestore_db
+
+    if time.monotonic() < _firestore_disabled_until:
+        return None
+
+    if _firestore_db is not None:
+        return _firestore_db
+    if not FIREBASE_AVAILABLE:
+        return None
+
+    project_id = os.getenv("FIREBASE_PROJECT_ID", "").strip() or None
+    service_account_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH", "").strip()
+    service_account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+
+    if not any([project_id, service_account_path, service_account_json]):
+        return None
+
+    try:
+        if not firebase_admin._apps:
+            if service_account_path:
+                cred = credentials.Certificate(_resolve_service_account_path(service_account_path))
+                if project_id:
+                    firebase_admin.initialize_app(cred, {"projectId": project_id})
+                else:
+                    firebase_admin.initialize_app(cred)
+            elif service_account_json:
+                cred = credentials.Certificate(json.loads(service_account_json))
+                if project_id:
+                    firebase_admin.initialize_app(cred, {"projectId": project_id})
+                else:
+                    firebase_admin.initialize_app(cred)
+            else:
+                firebase_admin.initialize_app(options={"projectId": project_id})
+
+        _firestore_db = firestore.client()
+        return _firestore_db
+    except Exception as exc:
+        logger.warning(f"Firebase initialization failed: {exc}. Falling back to MongoDB/JSON.")
+        return None
+
+
+def _trip_firestore_circuit(exc: Exception) -> None:
+    global _firestore_disabled_until
+    _firestore_disabled_until = time.monotonic() + FIRESTORE_CIRCUIT_BREAK_SECONDS
+    logger.error(
+        "Firebase Firestore unavailable (%s). Using fallback storage for %.0fs.",
+        exc,
+        FIRESTORE_CIRCUIT_BREAK_SECONDS,
+    )
+
+
+async def _firestore_call(func):
+    return await asyncio.wait_for(
+        asyncio.to_thread(func),
+        timeout=FIRESTORE_TIMEOUT_SECONDS,
+    )
+
+
+def _resolve_service_account_path(configured_path: str) -> str:
+    """Resolve service account paths from repo root, backend root, or current cwd."""
+    path = Path(configured_path)
+    if path.is_absolute() and path.exists():
+        return str(path)
+    if path.exists():
+        return str(path)
+
+    backend_root = Path(__file__).resolve().parents[1]
+    repo_root = backend_root.parent
+    for base in (backend_root, repo_root):
+        candidate = base / configured_path
+        if candidate.exists():
+            return str(candidate)
+
+    return configured_path
+
+
+async def init_firebase() -> bool:
+    """Initialize Firebase/Firestore and verify connectivity. Returns True if OK."""
+    db = get_firestore_database()
+    if db is None:
+        return False
+    try:
+        await _firestore_call(lambda: next(db.collection("_healthcheck").limit(1).stream(), None))
+        logger.info("Firebase Firestore connected successfully")
+        return True
+    except Exception as exc:
+        _trip_firestore_circuit(exc)
+        logger.warning(f"Firebase Firestore check failed: {exc}. Falling back to MongoDB/JSON.")
+        return False
+
+
 def get_database() -> Any:
     """
     Return the MongoDB Motor database instance, or None for JSON fallback.
@@ -280,6 +394,10 @@ async def ensure_indexes() -> None:
     │ {computed_at: 1}  (TTL, 2h)    │ auto-expiry of SHAP reports      │
     └─────────────────────────────────────────────────────────────────────┘
     """
+    if await init_firebase():
+        logger.info("ensure_indexes: Firebase Firestore available — index definitions are managed in Firebase console.")
+        return
+
     ok = await init_mongo()
     db = get_database() if ok else None
     if db is None:
@@ -359,6 +477,20 @@ async def save_prediction(record: dict) -> None:
     ``sensitive_value_group`` (anonymised group label) for audit purposes.
     """
     record["timestamp"] = datetime.now(timezone.utc).isoformat()
+    firestore_db = get_firestore_database()
+    if firestore_db is not None:
+        try:
+            firestore_record = _make_json_safe(record)
+            doc_id = str(record.get("correlation_id") or firestore_db.collection("predictions").document().id)
+            await _firestore_call(
+                lambda: firestore_db.collection("predictions").document(doc_id).set(firestore_record)
+            )
+            logger.debug(f"Saved to Firebase Firestore [{record.get('domain')}]")
+            _append_to_json(record)
+            return
+        except Exception as exc:
+            _trip_firestore_circuit(exc)
+
     db = get_database()
 
     if db is not None:
@@ -375,6 +507,38 @@ async def save_prediction(record: dict) -> None:
         _append_to_json(record)
 
 
+def _read_json_predictions(
+    domain: str,
+    limit: int,
+    projection: Dict[str, Any],
+    sensitive_attr: Optional[str] = None,
+) -> List[dict]:
+    """Read recent prediction history from the local JSON fallback."""
+    if not JSON_LOG_PATH.exists():
+        return []
+
+    try:
+        with open(JSON_LOG_PATH, "r", encoding="utf-8") as fh:
+            all_records = json.load(fh)
+
+        filtered = [r for r in all_records if r.get("domain") == domain]
+        if sensitive_attr:
+            filtered = [
+                r for r in filtered
+                if r.get("fairness", {}).get("sensitive_attribute") == sensitive_attr
+            ]
+
+        filtered.sort(key=lambda item: str(item.get("timestamp") or ""), reverse=True)
+        keep = set(projection.keys()) - {"_id"}
+        return [
+            {k: v for k, v in record.items() if k in keep}
+            for record in filtered[:limit]
+        ]
+    except Exception as exc:
+        logger.error(f"JSON read failed: {exc}")
+        return []
+
+
 async def update_ground_truth(correlation_id: str, ground_truth: int) -> bool:
     """
     Attach a real ``ground_truth`` label to an existing prediction record.
@@ -386,6 +550,32 @@ async def update_ground_truth(correlation_id: str, ground_truth: int) -> bool:
     Returns True when a record was updated, False when the record is not
     found or the database is not reachable.
     """
+    firestore_db = get_firestore_database()
+    if firestore_db is not None:
+        try:
+            ref = firestore_db.collection("predictions").document(correlation_id)
+            snapshot = await _firestore_call(ref.get)
+            if snapshot.exists:
+                await _firestore_call(lambda: ref.update({"ground_truth": int(ground_truth)}))
+                return True
+
+            matches = await _firestore_call(
+                lambda: list(
+                    firestore_db.collection("predictions")
+                    .where("correlation_id", "==", correlation_id)
+                    .limit(1)
+                    .stream()
+                )
+            )
+            if not matches:
+                raise LookupError("prediction not found in Firestore")
+            await _firestore_call(lambda: matches[0].reference.update({"ground_truth": int(ground_truth)}))
+            return True
+        except LookupError:
+            pass
+        except Exception as exc:
+            _trip_firestore_circuit(exc)
+
     db = get_database()
     if db is not None:
         try:
@@ -425,6 +615,22 @@ async def save_shap_report(correlation_id: str, report: dict) -> None:
     Used when Redis is unavailable and you want DB-backed SHAP persistence.
     The TTL index on computed_at auto-expires reports after 2 hours.
     """
+    firestore_db = get_firestore_database()
+    if firestore_db is not None:
+        try:
+            doc = _make_json_safe({
+                "correlation_id": correlation_id,
+                "computed_at":    datetime.now(timezone.utc).isoformat(),
+                **report,
+            })
+            await _firestore_call(
+                lambda: firestore_db.collection("shap_reports").document(correlation_id).set(doc)
+            )
+            logger.debug(f"Saved SHAP report to Firebase Firestore [{correlation_id[:8]}…]")
+            return
+        except Exception as exc:
+            _trip_firestore_circuit(exc)
+
     db = get_database()
     if db is None:
         return   # ShapCache in-memory store is the only backend in this case
@@ -470,8 +676,6 @@ async def get_recent_predictions(
     Without:              domain_timestamp_desc             (compound)
     Both cases: Mongo uses an index-covered sort — no in-memory sort.
     """
-    db = get_database()
-
     # ── Default lean projection — exclude large fields ────────────────────────
     # The preprocessing pipeline only needs: input, fairness, sensitive_value_group.
     # Excluding explanation, raw_input, and preprocessing saves ~60% data transfer.
@@ -491,6 +695,32 @@ async def get_recent_predictions(
             "_id":                   0,
         }
 
+    firestore_db = get_firestore_database()
+    if firestore_db is not None:
+        try:
+            def _query_firestore() -> list:
+                query = firestore_db.collection("predictions").where("domain", "==", domain)
+                keep = set(projection.keys()) - {"_id"}
+                records = []
+                for doc in query.stream():
+                    item = doc.to_dict()
+                    if sensitive_attr and item.get("fairness", {}).get("sensitive_attribute") != sensitive_attr:
+                        continue
+                    records.append({k: v for k, v in item.items() if k in keep})
+                records.sort(key=lambda item: str(item.get("timestamp") or ""), reverse=True)
+                return records[:limit]
+
+            firestore_records = await _firestore_call(_query_firestore)
+            if firestore_records:
+                return firestore_records
+            logger.info(
+                "Firestore returned no prediction history for domain=%s; using local fallback cache.",
+                domain,
+            )
+        except Exception as exc:
+            _trip_firestore_circuit(exc)
+
+    db = get_database()
     if db is not None:
         try:
             query: Dict[str, Any] = {"domain": domain}
@@ -504,35 +734,23 @@ async def get_recent_predictions(
                 .limit(limit)
                 .allow_disk_use(False)   # prevent spill-to-disk on large sorts
             )
-            return await cursor.to_list(length=limit)
+            mongo_records = await cursor.to_list(length=limit)
+            if mongo_records:
+                return mongo_records
+            logger.info(
+                "MongoDB returned no prediction history for domain=%s; using local fallback cache.",
+                domain,
+            )
         except Exception as exc:
             logger.error(f"MongoDB read failed: {exc}")
-            return []
 
     # ── JSON fallback ─────────────────────────────────────────────────────────
-    if not JSON_LOG_PATH.exists():
-        return []
-    try:
-        with open(JSON_LOG_PATH, "r") as fh:
-            all_records = json.load(fh)
-
-        filtered = [r for r in all_records if r.get("domain") == domain]
-        if sensitive_attr:
-            filtered = [
-                r for r in filtered
-                if r.get("fairness", {}).get("sensitive_attribute") == sensitive_attr
-            ]
-
-        # Apply lean projection to JSON records too (keeps parity with MongoDB)
-        keep = set(projection.keys()) - {"_id"}
-        projected = [
-            {k: v for k, v in r.items() if k in keep}
-            for r in filtered[-limit:]
-        ]
-        return projected
-    except Exception as exc:
-        logger.error(f"JSON read failed: {exc}")
-        return []
+    return _read_json_predictions(
+        domain=domain,
+        limit=limit,
+        projection=projection,
+        sensitive_attr=sensitive_attr,
+    )
 
 
 # ═════════════════════════════════════════════════════════════════════════════

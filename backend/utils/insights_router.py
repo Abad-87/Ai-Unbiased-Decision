@@ -49,6 +49,7 @@ def _normalize_group(value: Any) -> str:
 class RecentPrediction(BaseModel):
     correlation_id:        Optional[str] = None
     domain:                str
+    input:                 Optional[Dict[str, Any]] = None
     prediction:            int
     prediction_label:      Optional[str] = None
     confidence:            float
@@ -110,6 +111,7 @@ async def recent(
         out.append(RecentPrediction(
             correlation_id        = r.get("correlation_id"),
             domain                = r.get("domain", domain),
+            input                 = r.get("input"),
             prediction            = int(r.get("prediction", 0)),
             prediction_label      = r.get("prediction_label"),
             confidence            = float(r.get("confidence", 0.0)),

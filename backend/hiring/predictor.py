@@ -104,7 +104,7 @@ def predict(
         domain         = domain,
     )
 
-    explanation = _rule_based_explanation(features, prediction)
+    explanation = _plain_language_explanation(features, prediction)
 
     return {
         "prediction":     prediction,
@@ -155,6 +155,38 @@ def _rule_based_explanation(features: dict, prediction: int) -> str:
         weaknesses.append("no degree beyond high school")
     reason = ", ".join(weaknesses) or "did not meet minimum requirements"
     return f"Not hired — {reason}. (Full SHAP explanation pending)"
+
+
+def _plain_language_explanation(features: dict, prediction: int) -> str:
+    tech  = features.get("technical_score", 0)
+    comm  = features.get("communication_score", 0)
+    exp   = features.get("years_experience", 0)
+    certs = features.get("certifications", 0)
+
+    if prediction == 1:
+        strengths = []
+        if tech >= 70:
+            strengths.append(f"a strong technical score ({tech}/100)")
+        if comm >= 70:
+            strengths.append(f"a strong communication score ({comm}/100)")
+        if exp >= 3:
+            strengths.append(f"{exp} years of relevant experience")
+        if certs > 0:
+            strengths.append(f"{certs} certification(s)")
+        reason = ", ".join(strengths) or "the overall profile matching the role expectations"
+        return f"This candidate was hired mainly because of {reason}."
+
+    weaknesses = []
+    if tech < 50:
+        weaknesses.append(f"a low technical score ({tech}/100)")
+    if comm < 50:
+        weaknesses.append(f"a low communication score ({comm}/100)")
+    if exp < 2:
+        weaknesses.append(f"limited experience ({exp} years)")
+    if features.get("education_level", 1) == 0:
+        weaknesses.append("education stopping at high school")
+    reason = ", ".join(weaknesses) or "the profile not meeting the minimum role requirements"
+    return f"This candidate was not hired mainly because of {reason}."
 
 
 def _balanced_binary_decision(

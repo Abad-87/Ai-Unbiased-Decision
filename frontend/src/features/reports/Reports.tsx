@@ -8,6 +8,7 @@ interface PredictionRecord {
   correlation_id: string | null;
   input?: Record<string, unknown>;
   prediction: number;
+  prediction_label?: string | null;
   confidence: number;
   timestamp?: string | null;
 }
@@ -36,6 +37,170 @@ function buildSummary(s: SummaryResponse): string {
   return `${level} (DPD=${Math.abs(dpd).toFixed(2)}). Groups: ${grps}. Records: ${s.n_records}.`;
 }
 
+interface ReportRow {
+  id: number;
+  domain: Domain;
+  date: string;
+  model: string;
+  fairnessScore: number | null;
+  nRecords: number | null;
+  summary: string;
+  raw: SummaryResponse | null;
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function downloadJson(filename: string, payload: unknown) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildPrintableAuditHtml(report: ReportRow): string {
+  const raw = report.raw;
+  const groups = raw?.per_group ?? [];
+  const notes = raw?.notes ?? [];
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(report.model)} Audit Report</title>
+  <style>
+    body { font-family: Inter, Arial, sans-serif; color: #18181b; margin: 40px; line-height: 1.45; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    h2 { margin-top: 28px; font-size: 18px; }
+    .muted { color: #71717a; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 24px 0; }
+    .tile { border: 1px solid #d4d4d8; border-radius: 8px; padding: 14px; }
+    .label { color: #71717a; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+    .value { font-size: 24px; font-weight: 700; margin-top: 6px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { border-bottom: 1px solid #e4e4e7; padding: 10px; text-align: left; font-size: 13px; }
+    th { background: #f4f4f5; }
+    pre { background: #f4f4f5; border-radius: 8px; padding: 14px; white-space: pre-wrap; }
+    @media print { body { margin: 24px; } button { display: none; } }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(report.model)}</h1>
+  <div class="muted">Generated ${escapeHtml(new Date().toLocaleString())} • Domain: ${escapeHtml(report.domain)}</div>
+  <div class="grid">
+    <div class="tile"><div class="label">Fairness Score</div><div class="value">${escapeHtml(report.fairnessScore ?? 'N/A')}/100</div></div>
+    <div class="tile"><div class="label">Records</div><div class="value">${escapeHtml(report.nRecords ?? 0)}</div></div>
+    <div class="tile"><div class="label">DPD</div><div class="value">${escapeHtml(raw?.demographic_parity_difference ?? 'N/A')}</div></div>
+    <div class="tile"><div class="label">EOD</div><div class="value">${escapeHtml(raw?.equal_opportunity_difference ?? 'N/A')}</div></div>
+  </div>
+  <h2>Executive Summary</h2>
+  <p>${escapeHtml(report.summary)}</p>
+  <h2>Protected Group Metrics</h2>
+  <table>
+    <thead><tr><th>Group</th><th>N</th><th>Positive Rate</th><th>Avg Confidence</th><th>Labelled</th><th>Accuracy</th></tr></thead>
+    <tbody>
+      ${groups.length ? groups.map((group) => `
+        <tr>
+          <td>${escapeHtml(group.group)}</td>
+          <td>${escapeHtml(group.n)}</td>
+          <td>${escapeHtml(group.positive_rate)}</td>
+          <td>${escapeHtml(group.avg_confidence)}</td>
+          <td>${escapeHtml(group.labelled_count)}</td>
+          <td>${escapeHtml(group.accuracy ?? 'N/A')}</td>
+        </tr>
+      `).join('') : '<tr><td colspan="6">No group metrics available.</td></tr>'}
+    </tbody>
+  </table>
+  <h2>Notes</h2>
+  ${notes.length ? `<ul>${notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>` : '<p class="muted">No notes.</p>'}
+  <h2>Raw Audit Payload</h2>
+  <pre>${escapeHtml(JSON.stringify(raw, null, 2))}</pre>
+  <script>window.addEventListener('load', () => setTimeout(() => window.print(), 250));</script>
+</body>
+</html>`;
+}
+
+async function exportPrintableAuditReport(report: ReportRow) {
+  if (!report.raw) return;
+  try {
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const margin = 40;
+    const width = doc.internal.pageSize.getWidth() - margin * 2;
+    let y = margin;
+
+    const addLine = (text: string, size = 10, gap = 14) => {
+      doc.setFontSize(size);
+      const lines = doc.splitTextToSize(text, width);
+      for (const line of lines) {
+        if (y > 760) {
+          doc.addPage();
+          y = margin;
+        }
+        doc.text(line, margin, y);
+        y += gap;
+      }
+    };
+
+    doc.setFont('helvetica', 'bold');
+    addLine(report.model, 18, 22);
+    doc.setFont('helvetica', 'normal');
+    addLine(`Generated: ${new Date().toLocaleString()} | Domain: ${report.domain}`, 10, 16);
+    addLine(`Fairness score: ${report.fairnessScore ?? 'N/A'}/100`, 12, 18);
+    addLine(`Records: ${report.nRecords ?? 0}`, 12, 18);
+    addLine(`DPD: ${report.raw.demographic_parity_difference ?? 'N/A'} | EOD: ${report.raw.equal_opportunity_difference ?? 'N/A'}`, 12, 18);
+    y += 8;
+    doc.setFont('helvetica', 'bold');
+    addLine('Executive Summary', 14, 18);
+    doc.setFont('helvetica', 'normal');
+    addLine(report.summary, 10, 14);
+
+    y += 8;
+    doc.setFont('helvetica', 'bold');
+    addLine('Protected Group Metrics', 14, 18);
+    doc.setFont('helvetica', 'normal');
+    const groups = report.raw.per_group.length
+      ? report.raw.per_group
+      : [{ group: 'No group metrics available', n: 0, positive_rate: 0, avg_confidence: 0, labelled_count: 0, accuracy: null }];
+    for (const group of groups) {
+      addLine(
+        `${group.group} | n=${group.n} | positive_rate=${group.positive_rate} | avg_confidence=${group.avg_confidence} | labelled=${group.labelled_count} | accuracy=${group.accuracy ?? 'N/A'}`,
+        9,
+        13
+      );
+    }
+
+    if (report.raw.notes.length > 0) {
+      y += 8;
+      doc.setFont('helvetica', 'bold');
+      addLine('Notes', 14, 18);
+      doc.setFont('helvetica', 'normal');
+      report.raw.notes.forEach((note) => addLine(`- ${note}`, 9, 13));
+    }
+
+    doc.save(`${report.domain}_audit_report.pdf`);
+    return;
+  } catch {
+    // Fallback remains useful in locked-down browsers where PDF generation fails.
+  }
+  const html = buildPrintableAuditHtml(report);
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${report.domain}_audit_report.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function Reports({ refreshKey = 0 }: { refreshKey?: number }) {
   const { insights: autoInsights, autoPredictions, lastUpdated } = useScanContext();
   const [summaries, setSummaries] = useState<Partial<Record<Domain, SummaryResponse>>>({});
@@ -54,7 +219,7 @@ export function Reports({ refreshKey = 0 }: { refreshKey?: number }) {
 
   useEffect(() => { fetchAll(); }, [refreshKey]);
 
-  const reports = DOMAINS.map((domain, idx) => {
+  const reports: ReportRow[] = DOMAINS.map((domain, idx) => {
     const s = summaries[domain];
     return {
       id:            idx + 1,
@@ -100,6 +265,16 @@ export function Reports({ refreshKey = 0 }: { refreshKey?: number }) {
     fetchRecentPredictions();
   };
 
+  const recentRows = DOMAINS.flatMap((domain) =>
+    (recentPredictions[domain] || []).map((prediction) => ({ domain, prediction }))
+  )
+    .sort((a, b) => {
+      const aTime = Date.parse(a.prediction.timestamp || '');
+      const bTime = Date.parse(b.prediction.timestamp || '');
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    })
+    .slice(0, 9);
+
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       <div className="flex justify-between items-center">
@@ -114,8 +289,7 @@ export function Reports({ refreshKey = 0 }: { refreshKey?: number }) {
         </div>
         <button
           onClick={handleRefreshAll}
-          disabled={loading || loadingRecent}
-          className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-2xl flex items-center gap-2 font-medium"
+          className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl flex items-center gap-2 font-medium"
         >
           <RefreshCw size={18} className={loading || loadingRecent ? 'animate-spin' : ''} />
           {loading || loadingRecent ? 'Refreshing…' : 'Refresh All'}
@@ -227,24 +401,32 @@ export function Reports({ refreshKey = 0 }: { refreshKey?: number }) {
                         <button
                           onClick={() => {
                             if (!report.raw) return;
-                            const blob = new Blob([JSON.stringify(report.raw, null, 2)], { type: 'application/json' });
-                            const url  = URL.createObjectURL(blob);
-                            const a    = document.createElement('a');
-                            a.href = url; a.download = `${report.domain}_report.json`; a.click();
-                            URL.revokeObjectURL(url);
+                            downloadJson(`${report.domain}_audit_report.json`, {
+                              generated_at: new Date().toISOString(),
+                              model: report.model,
+                              summary: report.summary,
+                              fairness_score: report.fairnessScore,
+                              ...report.raw,
+                            });
                           }}
                           className="p-3 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
                           title="Export JSON"
                         >
                           <Eye size={20} className="text-zinc-600 dark:text-zinc-400" />
                         </button>
-                        <button
-                          onClick={() => alert(`PDF export for ${report.model} — integrate a PDF library for production.`)}
-                          className="p-3 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
-                          title="Export PDF"
-                        >
-                          <Download size={20} className="text-zinc-600 dark:text-zinc-400" />
-                        </button>
+                        {report.raw ? (
+                          <button
+                            onClick={() => void exportPrintableAuditReport(report)}
+                            className="p-3 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
+                            title="Download PDF report"
+                          >
+                            <Download size={20} className="text-zinc-600 dark:text-zinc-400" />
+                          </button>
+                        ) : (
+                          <span className="p-3 rounded-xl opacity-40" title="Report loading">
+                            <Download size={20} className="text-zinc-600 dark:text-zinc-400" />
+                          </span>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -286,41 +468,7 @@ export function Reports({ refreshKey = 0 }: { refreshKey?: number }) {
                     Loading recent predictions...
                   </td>
                 </tr>
-              ) : DOMAINS.flatMap(d => 
-                (recentPredictions[d] || []).slice(0, 3).map((pred, i) => (
-                  <tr key={`${d}-${i}`} className="border-b dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
-                    <td className="py-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        d === 'loan' ? 'bg-emerald-100 text-emerald-700' :
-                        d === 'hiring' ? 'bg-blue-100 text-blue-700' :
-                        'bg-violet-100 text-violet-700'
-                      }`}>
-                        {MODEL_NAMES[d]}
-                      </span>
-                    </td>
-                    <td className="py-4">
-                      <code className="text-sm bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded">
-                        {pred.correlation_id?.slice(0, 8)}...
-                      </code>
-                    </td>
-                    <td className="py-4">
-                      <span className={`font-semibold ${
-                        pred.prediction === 1 ? 'text-emerald-600' : 'text-red-600'
-                      }`}>
-                        {pred.prediction === 1 ? 'Positive' : 'Negative'}
-                      </span>
-                    </td>
-                    <td className="py-4 dark:text-white">
-                      {(pred.confidence * 100).toFixed(1)}%
-                    </td>
-                    <td className="py-4 text-sm text-zinc-500 dark:text-zinc-400">
-                      {pred.input && Object.entries(pred.input).slice(0, 2).map(([k, v]) => (
-                        <span key={k} className="mr-2">{k}: {String(v).slice(0, 15)}</span>
-                      ))}
-                    </td>
-                  </tr>
-                ))
-              ).length === 0 ? (
+              ) : recentRows.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-zinc-500">
                     <AlertTriangle size={20} className="mx-auto mb-2" />
@@ -328,9 +476,8 @@ export function Reports({ refreshKey = 0 }: { refreshKey?: number }) {
                   </td>
                 </tr>
               ) : (
-                DOMAINS.flatMap(d => 
-                  (recentPredictions[d] || []).slice(0, 3).map((pred, i) => (
-                    <tr key={`${d}-${i}`} className="border-b dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
+                recentRows.map(({ domain: d, prediction: pred }) => (
+                    <tr key={`${d}-${pred.correlation_id || pred.timestamp}`} className="border-b dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
                       <td className="py-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                           d === 'loan' ? 'bg-emerald-100 text-emerald-700' :
@@ -349,20 +496,21 @@ export function Reports({ refreshKey = 0 }: { refreshKey?: number }) {
                         <span className={`font-semibold ${
                           pred.prediction === 1 ? 'text-emerald-600' : 'text-red-600'
                         }`}>
-                          {pred.prediction === 1 ? 'Positive' : 'Negative'}
+                          {pred.prediction_label || (pred.prediction === 1 ? 'Positive' : 'Negative')}
                         </span>
                       </td>
                       <td className="py-4 dark:text-white">
                         {(pred.confidence * 100).toFixed(1)}%
                       </td>
                       <td className="py-4 text-sm text-zinc-500 dark:text-zinc-400">
-                        {pred.input && Object.entries(pred.input).slice(0, 2).map(([k, v]) => (
-                          <span key={k} className="mr-2">{k}: {String(v).slice(0, 15)}</span>
-                        ))}
+                        {pred.input && Object.keys(pred.input).length > 0
+                          ? Object.entries(pred.input).slice(0, 2).map(([k, v]) => (
+                              <span key={k} className="mr-2">{k}: {String(v).slice(0, 15)}</span>
+                            ))
+                          : '—'}
                       </td>
                     </tr>
                   ))
-                )
               )}
             </tbody>
           </table>

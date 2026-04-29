@@ -30,6 +30,9 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 // The backend validates and analyzes only CSV/JSON datasets.
 const ALLOWED_TYPES = ['.csv', '.json'];
+const UPLOAD_RETENTION_MS = 2 * 60 * 60 * 1000;
+const RETENTION_DISMISSED_KEY = 'unbiased-ai:retention-dismissed-file-ids';
+const RETENTION_LAST_PROMPT_KEY = 'unbiased-ai:retention-last-prompt-key';
 
 interface DatasetsProps {
   /**
@@ -95,6 +98,45 @@ export function Datasets({ scanTrigger = 0, onScanComplete }: DatasetsProps) {
   useEffect(() => {
     fetchFiles();
   }, [fetchFiles]);
+
+  useEffect(() => {
+    if (loading || files.length === 0) return;
+
+    const dismissed = new Set<string>(
+      JSON.parse(window.sessionStorage.getItem(RETENTION_DISMISSED_KEY) || '[]') as string[]
+    );
+    const expiredFiles = files.filter((file) => {
+      const uploadedAt = Date.parse(file.uploaded_at);
+      return Number.isFinite(uploadedAt)
+        && Date.now() - uploadedAt >= UPLOAD_RETENTION_MS
+        && !dismissed.has(file.id);
+    });
+
+    if (expiredFiles.length === 0) return;
+
+    const promptKey = expiredFiles.map((file) => file.id).sort().join('|');
+    if (window.sessionStorage.getItem(RETENTION_LAST_PROMPT_KEY) === promptKey) return;
+    window.sessionStorage.setItem(RETENTION_LAST_PROMPT_KEY, promptKey);
+
+    const filenames = expiredFiles.slice(0, 5).map((file) => file.filename).join(', ');
+    const remaining = expiredFiles.length > 5 ? ` and ${expiredFiles.length - 5} more` : '';
+    const approved = window.confirm(
+      `${expiredFiles.length} uploaded file${expiredFiles.length === 1 ? '' : 's'} are older than 2 hours: ${filenames}${remaining}.\n\nDelete them now?`
+    );
+
+    if (!approved) {
+      window.sessionStorage.setItem(
+        RETENTION_DISMISSED_KEY,
+        JSON.stringify([...dismissed, ...expiredFiles.map((file) => file.id)])
+      );
+      return;
+    }
+
+    void Promise.allSettled(expiredFiles.map((file) => api.deleteFile(file.id))).then(() => {
+      setFiles((current) => current.filter((file) => !expiredFiles.some((expired) => expired.id === file.id)));
+      void fetchFiles();
+    });
+  }, [fetchFiles, files, loading]);
 
   useEffect(() => {
     setSelectedAnalysisRow(0);
@@ -467,7 +509,7 @@ export function Datasets({ scanTrigger = 0, onScanComplete }: DatasetsProps) {
             />
             <select
               value={domain}
-              onChange={(e) => setDomain(e.target.value as any)}
+              onChange={(e) => setDomain(e.target.value as 'loan' | 'hiring' | 'social' | '')}
               className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2 text-sm dark:text-white"
             >
               <option value="">Select domain (optional)</option>

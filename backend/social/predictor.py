@@ -68,7 +68,7 @@ def predict(
         domain         = domain,
     )
 
-    explanation = _rule_based_explanation(features, category_label)
+    explanation = _plain_language_explanation(features, category_label)
 
     return {
         "prediction":     category_id,
@@ -113,3 +113,23 @@ def _rule_based_explanation(features: dict, category_label: str) -> str:
         f"Recommended '{category_label}' based on {signals_str}. "
         "(Full SHAP explanation pending)"
     )
+
+
+def _plain_language_explanation(features: dict, category_label: str) -> str:
+    like_rate    = features.get("like_rate", 0)
+    share_rate   = features.get("share_rate", 0)
+    session_mins = features.get("avg_session_minutes", 0)
+    topics       = features.get("topics_interacted", 0)
+
+    signals = []
+    if like_rate > 0.6:
+        signals.append(f"strong content engagement ({like_rate:.0%} like rate)")
+    if share_rate > 0.3:
+        signals.append(f"active sharing ({share_rate:.0%} share rate)")
+    if session_mins > 30:
+        signals.append(f"long browsing sessions ({session_mins:.0f} minutes on average)")
+    if topics > 6:
+        signals.append(f"interest across many topics ({topics})")
+
+    reason = ", ".join(signals) or "the recent activity pattern"
+    return f"This user was recommended '{category_label}' mainly because of {reason}."

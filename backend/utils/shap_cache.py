@@ -629,14 +629,11 @@ def _blocking_shap_compute(
         if not shap_dict:
             raise ValueError("Empty SHAP dict after normalisation")
 
-        # Build explanation from top SHAP feature
-        top_feat, top_val = max(shap_dict.items(), key=lambda kv: abs(kv[1]))
-        direction  = "high" if top_val > 0 else "low"
-        pretty     = top_feat.replace("_", " ")
-        feat_value = features_dict.get(top_feat, "N/A")
-        explanation = (
-            f"[SHAP] Decision driven by {direction} {pretty} "
-            f"(value: {feat_value}, SHAP: {top_val:+.4f})."
+        explanation = _plain_language_shap_explanation(
+            domain=domain,
+            prediction=prediction,
+            features_dict=features_dict,
+            shap_dict=shap_dict,
         )
 
         return shap_dict, explanation
@@ -662,6 +659,35 @@ def _rule_based_fallback(features_dict: dict, prediction: int, domain: str) -> s
         like = features_dict.get("like_rate", "N/A")
         return f"Recommendation based on engagement (like_rate: {like})."
     return "Explanation unavailable — SHAP computation failed."
+
+
+def _plain_language_shap_explanation(
+    domain: str,
+    prediction: int,
+    features_dict: dict,
+    shap_dict: Dict[str, float],
+) -> str:
+    top_features = sorted(shap_dict.items(), key=lambda kv: abs(kv[1]), reverse=True)[:3]
+    if not top_features:
+        return _rule_based_fallback(features_dict, prediction, domain)
+
+    reason_parts: List[str] = []
+    for feature, shap_value in top_features:
+        direction = "helped" if shap_value > 0 else "pulled down"
+        feature_label = feature.replace("_", " ")
+        feature_value = features_dict.get(feature, "N/A")
+        reason_parts.append(f"{feature_label} ({feature_value}) {direction} this decision")
+
+    joined = "; ".join(reason_parts)
+    if domain == "loan":
+        outcome = "approved" if prediction == 1 else "not approved"
+        return f"This loan was {outcome} mainly because {joined}."
+    if domain == "hiring":
+        outcome = "hired" if prediction == 1 else "not hired"
+        return f"This candidate was {outcome} mainly because {joined}."
+    if domain == "social":
+        return f"This content recommendation was made mainly because {joined}."
+    return joined
 
 
 def _utc_now() -> str:
