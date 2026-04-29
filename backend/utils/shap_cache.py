@@ -672,6 +672,8 @@ def _plain_language_shap_explanation(
         return _rule_based_fallback(features_dict, prediction, domain)
 
     reason_parts: List[str] = []
+    top_feature_name, top_feature_shap = top_features[0]
+    top_feature_value = features_dict.get(top_feature_name, "N/A")
     for feature, shap_value in top_features:
         direction = "helped" if shap_value > 0 else "pulled down"
         feature_label = feature.replace("_", " ")
@@ -679,15 +681,19 @@ def _plain_language_shap_explanation(
         reason_parts.append(f"{feature_label} ({feature_value}) {direction} this decision")
 
     joined = "; ".join(reason_parts)
+    shap_detail = (
+        f" Top driver value: {top_feature_value}. "
+        f"SHAP: {top_feature_shap:+.4f} for {top_feature_name.replace('_', ' ')}."
+    )
     if domain == "loan":
         outcome = "approved" if prediction == 1 else "not approved"
-        return f"This loan was {outcome} mainly because {joined}."
+        return f"[SHAP] This loan was {outcome} mainly because {joined}.{shap_detail}"
     if domain == "hiring":
         outcome = "hired" if prediction == 1 else "not hired"
-        return f"This candidate was {outcome} mainly because {joined}."
+        return f"[SHAP] This candidate was {outcome} mainly because {joined}.{shap_detail}"
     if domain == "social":
-        return f"This content recommendation was made mainly because {joined}."
-    return joined
+        return f"[SHAP] This content recommendation was made mainly because {joined}.{shap_detail}"
+    return f"[SHAP] {joined}.{shap_detail}"
 
 
 def _utc_now() -> str:

@@ -132,7 +132,7 @@ def _plain_language_explanation(features: dict, prediction: int) -> str:
         if emp_years >= 2:
             factors.append(f"{emp_years} years of steady employment")
         reason = ", ".join(factors) or "the profile meeting the main lending checks"
-        return f"This loan was approved mainly because of {reason}."
+        return f"Loan approved - mainly because of {reason}. (Full SHAP explanation pending)"
 
     issues = []
     if credit < 600:
@@ -144,7 +144,7 @@ def _plain_language_explanation(features: dict, prediction: int) -> str:
     if emp_years < 1:
         issues.append("very limited employment history")
     reason = "; ".join(issues) or "the application missing the minimum lending signals"
-    return f"This loan was not approved mainly because of {reason}."
+    return f"Loan rejected - mainly because of {reason}. (Full SHAP explanation pending)"
 
 
 def _balanced_binary_decision(

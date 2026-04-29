@@ -174,7 +174,7 @@ def _plain_language_explanation(features: dict, prediction: int) -> str:
         if certs > 0:
             strengths.append(f"{certs} certification(s)")
         reason = ", ".join(strengths) or "the overall profile matching the role expectations"
-        return f"This candidate was hired mainly because of {reason}."
+        return f"Hired - mainly because of {reason}. (Full SHAP explanation pending)"
 
     weaknesses = []
     if tech < 50:
@@ -186,7 +186,7 @@ def _plain_language_explanation(features: dict, prediction: int) -> str:
     if features.get("education_level", 1) == 0:
         weaknesses.append("education stopping at high school")
     reason = ", ".join(weaknesses) or "the profile not meeting the minimum role requirements"
-    return f"This candidate was not hired mainly because of {reason}."
+    return f"Not hired - mainly because of {reason}. (Full SHAP explanation pending)"
 
 
 def _balanced_binary_decision(

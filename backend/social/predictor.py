@@ -132,4 +132,4 @@ def _plain_language_explanation(features: dict, category_label: str) -> str:
         signals.append(f"interest across many topics ({topics})")
 
     reason = ", ".join(signals) or "the recent activity pattern"
-    return f"This user was recommended '{category_label}' mainly because of {reason}."
+    return f"Recommended '{category_label}' - mainly because of {reason}. (Full SHAP explanation pending)"
