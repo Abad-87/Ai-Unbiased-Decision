@@ -163,8 +163,8 @@ One-click **JSON export** for regulatory submissions. Full ground-truth feedback
 ### 1 · Clone & Bootstrap
 
 ```bash
-git clone https://github.com/your-username/unbiased-ai.git
-cd unbiased-ai
+git clone https://github.com/Abad-87/Ai-Unbiased-Decision.git
+cd Ai-Unbiased-Decision
 
 # Generate placeholder ML models (required before first run)
 python create_dummy_models.py
@@ -186,7 +186,7 @@ cp ../.env.example .env
 uvicorn main:app --reload --port 8000
 ```
 
-> API docs available at **http://localhost:8000/docs**
+> API docs available at ** https://ai-unbiased-decision.onrender.com/docs**
 
 ### 3 · Frontend
 
@@ -204,7 +204,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-> App available at **http://localhost:5173**
+> App available at **https://ai-unbiased.netlify.app**
 
 <br/>
 
