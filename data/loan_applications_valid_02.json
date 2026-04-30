@@ -1,0 +1,32 @@
+[
+  {
+    "applicant_uid": "L101",
+    "monthly_stable_income": 6500,
+    "credit_history_score": 705,
+    "debt_to_income_ratio": 0.34,
+    "employment_stability_years": 5,
+    "existing_loan_count": 1,
+    "collateral_valuation_amount": 28000,
+    "requested_loan_tenure": 36,
+    "payment_default_history": 0,
+    "verified_identity_flag": 1,
+    "residential_status_stability": 1,
+    "bank_statement_analysis_score": 81,
+    "is_eligible_for_loan": 1
+  },
+  {
+    "applicant_uid": "L102",
+    "monthly_stable_income": 3600,
+    "credit_history_score": 588,
+    "debt_to_income_ratio": 0.66,
+    "employment_stability_years": 1,
+    "existing_loan_count": 4,
+    "collateral_valuation_amount": 12000,
+    "requested_loan_tenure": 84,
+    "payment_default_history": 1,
+    "verified_identity_flag": 1,
+    "residential_status_stability": 0,
+    "bank_statement_analysis_score": 47,
+    "is_eligible_for_loan": 0
+  }
+]
