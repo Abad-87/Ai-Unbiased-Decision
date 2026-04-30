@@ -25,6 +25,10 @@
 > **AI shouldn't discriminate.**  
 > Unbiased AI gives you the tools to detect, visualize, and eliminate bias in automated decisions — across hiring, lending, and content recommendation.
 
+Contributions: Saumya - Frontend Development & UI/UX Designer
+               Abad   - Backend Development & Partial Full-Stack Implementation
+               Safwan - Data Management & Testing
+               Zaid   - Batch Testing, System Validation & Project Guidance 
 <br/>
 
 ---
