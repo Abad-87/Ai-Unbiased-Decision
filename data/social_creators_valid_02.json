@@ -1,0 +1,32 @@
+[
+  {
+    "creator_handle": "@fitness_jules",
+    "platform_type": "Instagram",
+    "follower_count": 98000,
+    "average_engagement_rate": 0.064,
+    "reach_to_follower_ratio": 0.71,
+    "bot_detection_index": 0.07,
+    "comment_authenticity_score": 0.88,
+    "sponsorship_history_count": 18,
+    "audience_demographics_match": 0.84,
+    "content_consistency_score": 0.9,
+    "video_view_to_like_ratio": 14.8,
+    "account_creation_age_months": 64,
+    "is_legit_influencer": 1
+  },
+  {
+    "creator_handle": "@viral_boost_now",
+    "platform_type": "TikTok",
+    "follower_count": 45000,
+    "average_engagement_rate": 0.012,
+    "reach_to_follower_ratio": 0.18,
+    "bot_detection_index": 0.82,
+    "comment_authenticity_score": 0.28,
+    "sponsorship_history_count": 1,
+    "audience_demographics_match": 0.37,
+    "content_consistency_score": 0.31,
+    "video_view_to_like_ratio": 88.6,
+    "account_creation_age_months": 3,
+    "is_legit_influencer": 0
+  }
+]
