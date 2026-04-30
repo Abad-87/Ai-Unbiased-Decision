@@ -1,0 +1,101 @@
+candidate_id,full_name,degree_specialization,cgpa_percentage,years_of_experience,technical_skills_list,dbms_proficiency_level,ai_ml_frameworks_known,projects_github_count,certification_validity_score,last_job_role,expected_salary_range,is_legitimate_candidate
+C001,Anaya Rao,Computer Applications,65,3,python;sql,38,pytorch;transformers,11,70,Software Engineer,46000-177000,0
+C002,Anaya Kapoor,Electronics,55,13,python;nlp,39,sklearn,8,38,ML Engineer,126000-174000,0
+C003,Diya Sharma,Information Technology,87,13,excel;python,63,sklearn;tensorflow,5,92,Backend Developer,54000-153000,1
+C004,Vivaan Patel,Data Science,74,10,python;nlp,48,pytorch,12,46,Data Engineer,128000-169000,0
+C005,Diya Nair,Data Science,85,3,python;nlp,83,tensorflow;keras,11,45,Data Engineer,40000-154000,1
+C006,Kabir Singh,Artificial Intelligence,56,9,excel;python,45,pytorch,2,64,Backend Developer,80000-153000,0
+C007,Zara Kapoor,Information Technology,84,8,react;node;sql,44,sklearn;tensorflow,4,56,Intern,123000-175000,0
+C008,Aarav Patel,Artificial Intelligence,64,7,python;ml;sql,76,sklearn,3,42,Software Engineer,126000-160000,0
+C009,Maya Rao,Data Science,91,6,java;spring;sql,98,tensorflow;keras,11,85,Software Engineer,103000-156000,1
+C010,Aditya Das,Artificial Intelligence,64,13,python;sql,86,sklearn,1,81,ML Engineer,115000-150000,1
+C011,Rohan Khan,Electronics,74,13,python;ml;sql,43,,0,84,Intern,127000-147000,1
+C012,Kabir Rao,Artificial Intelligence,68,8,python;sql,78,pytorch;transformers,11,49,Backend Developer,99000-151000,0
+C013,Isha Rao,Electronics,59,3,python;nlp,73,sklearn,9,60,Backend Developer,97000-141000,0
+C014,Aarav Kapoor,Electronics,65,3,python;sql,81,sklearn,11,74,Analyst,43000-174000,1
+C015,Aditya Singh,Electronics,85,4,python;nlp,51,sklearn;tensorflow,3,95,Software Engineer,128000-152000,1
+C016,Nina Khan,Computer Science,78,9,java;spring;sql,86,tensorflow;keras,1,82,Backend Developer,37000-177000,1
+C017,Zara Sharma,Information Technology,54,7,python;sql,63,sklearn,5,35,Data Engineer,100000-155000,0
+C018,Aditya Nair,Electronics,84,8,react;node;sql,97,tensorflow;keras,12,62,Analyst,87000-152000,1
+C019,Kabir Iyer,Artificial Intelligence,72,3,excel;python,47,sklearn,10,90,Intern,117000-146000,1
+C020,Anaya Kapoor,Information Technology,56,1,python;nlp,86,sklearn;tensorflow,2,78,Analyst,58000-157000,1
+C021,Nina Mehta,Computer Science,78,14,excel;python,66,,0,44,Data Engineer,65000-150000,1
+C022,Kabir Sharma,Information Technology,63,13,react;node;sql,97,sklearn,6,96,Backend Developer,93000-158000,1
+C023,Diya Kapoor,Computer Science,62,13,python;nlp,97,pytorch;transformers,8,54,Data Engineer,130000-160000,1
+C024,Nina Rao,Computer Science,82,1,python;nlp,41,sklearn,2,96,Data Engineer,111000-144000,1
+C025,Anaya Nair,Electronics,86,7,python;sql,86,,1,50,Analyst,119000-177000,1
+C026,Zara Patel,Information Technology,92,10,python;ml;sql,68,sklearn;tensorflow,2,61,Intern,117000-159000,1
+C027,Maya Nair,Electronics,50,14,python;sql,75,sklearn,8,44,ML Engineer,99000-156000,0
+C028,Isha Singh,Information Technology,65,4,react;node;sql,79,,11,43,Backend Developer,113000-173000,0
+C029,Diya Mehta,Computer Science,58,0,excel;python,73,,2,48,Backend Developer,71000-178000,0
+C030,Tara Singh,Electronics,93,6,react;node;sql,78,pytorch,0,61,Data Engineer,116000-167000,1
+C031,Aditya Singh,Information Technology,71,8,excel;python,40,sklearn;tensorflow,8,35,Intern,89000-175000,0
+C032,Aditya Das,Computer Science,94,0,python;ml;sql,49,,8,44,ML Engineer,90000-148000,0
+C033,Isha Kapoor,Computer Applications,52,1,java;spring;sql,74,pytorch;transformers,1,81,Backend Developer,106000-166000,0
+C034,Kabir Sharma,Information Technology,61,4,excel;python,65,pytorch,12,55,Analyst,120000-155000,0
+C035,Aarav Khan,Information Technology,74,8,java;spring;sql,55,sklearn;tensorflow,5,48,Backend Developer,64000-154000,0
+C036,Diya Mehta,Data Science,71,0,python;ml;sql,59,pytorch;transformers,8,86,Analyst,121000-174000,1
+C037,Aditya Nair,Data Science,66,10,python;sql,38,sklearn,9,49,Analyst,79000-160000,0
+C038,Anaya Singh,Computer Science,86,13,excel;python,49,sklearn;tensorflow,0,84,Software Engineer,103000-152000,1
+C039,Isha Nair,Data Science,92,11,excel;python,90,sklearn,11,43,Backend Developer,99000-159000,1
+C040,Diya Das,Information Technology,94,13,java;spring;sql,76,sklearn;tensorflow,10,86,Analyst,121000-151000,1
+C041,Diya Kapoor,Artificial Intelligence,69,9,python;nlp,86,,10,35,Backend Developer,94000-168000,0
+C042,Tara Mehta,Data Science,60,14,python;nlp,62,pytorch;transformers,10,95,Software Engineer,77000-145000,1
+C043,Aditya Sharma,Computer Science,62,7,java;spring;sql,74,sklearn;tensorflow,9,63,Data Engineer,93000-166000,0
+C044,Anaya Rao,Computer Applications,75,6,excel;python,84,sklearn,12,98,Data Engineer,89000-154000,1
+C045,Anaya Mehta,Artificial Intelligence,85,5,java;spring;sql,94,sklearn;tensorflow,10,41,Software Engineer,106000-178000,1
+C046,Maya Rao,Computer Applications,85,10,react;node;sql,91,sklearn;tensorflow,4,89,ML Engineer,116000-157000,1
+C047,Vivaan Singh,Information Technology,78,15,python;ml;sql,65,pytorch,5,70,Software Engineer,45000-148000,1
+C048,Aditya Kapoor,Computer Science,94,4,react;node;sql,64,sklearn;tensorflow,5,84,Software Engineer,94000-166000,1
+C049,Rohan Sharma,Electronics,74,1,react;node;sql,61,sklearn;tensorflow,0,88,Backend Developer,73000-164000,1
+C050,Diya Iyer,Artificial Intelligence,64,13,python;sql,63,sklearn;tensorflow,5,97,Intern,121000-165000,1
+C051,Nina Sharma,Artificial Intelligence,89,5,python;nlp,94,,10,51,Data Engineer,45000-167000,1
+C052,Diya Iyer,Data Science,53,4,java;spring;sql,94,sklearn;tensorflow,5,58,Backend Developer,83000-157000,0
+C053,Aarav Das,Computer Science,80,13,python;ml;sql,67,tensorflow;keras,10,45,Data Engineer,118000-142000,1
+C054,Rohan Rao,Information Technology,51,0,java;spring;sql,66,sklearn;tensorflow,10,60,Data Engineer,107000-153000,0
+C055,Rohan Nair,Computer Applications,60,14,excel;python,67,sklearn,12,82,ML Engineer,74000-146000,1
+C056,Zara Kapoor,Computer Science,75,0,python;nlp,74,pytorch;transformers,10,83,ML Engineer,48000-159000,1
+C057,Kabir Patel,Computer Science,84,3,python;nlp,40,pytorch;transformers,5,79,Data Engineer,88000-171000,0
+C058,Maya Rao,Artificial Intelligence,90,3,java;spring;sql,90,pytorch;transformers,8,81,Intern,69000-179000,1
+C059,Rohan Singh,Data Science,96,15,java;spring;sql,94,sklearn,4,90,Analyst,66000-169000,1
+C060,Isha Rao,Artificial Intelligence,81,12,java;spring;sql,78,pytorch,12,38,Backend Developer,78000-157000,1
+C061,Anaya Iyer,Artificial Intelligence,55,8,python;nlp,36,tensorflow;keras,11,59,Analyst,117000-171000,0
+C062,Anaya Iyer,Computer Applications,68,14,java;spring;sql,37,pytorch,10,46,Software Engineer,82000-170000,0
+C063,Zara Khan,Data Science,72,11,python;ml;sql,89,pytorch,3,77,Data Engineer,127000-152000,1
+C064,Anaya Khan,Data Science,62,10,excel;python,50,,12,58,Software Engineer,111000-158000,0
+C065,Isha Rao,Data Science,64,3,python;sql,59,pytorch;transformers,8,72,ML Engineer,70000-142000,0
+C066,Maya Mehta,Computer Science,90,1,python;nlp,72,pytorch,7,51,Analyst,91000-161000,1
+C067,Vivaan Mehta,Artificial Intelligence,80,5,react;node;sql,41,sklearn,9,67,Intern,122000-143000,0
+C068,Anaya Mehta,Electronics,55,4,react;node;sql,54,,9,73,Software Engineer,63000-173000,0
+C069,Rohan Iyer,Data Science,69,12,python;nlp,92,,0,91,Software Engineer,129000-146000,1
+C070,Vivaan Rao,Information Technology,92,6,java;spring;sql,62,,1,68,ML Engineer,35000-166000,1
+C071,Anaya Singh,Computer Applications,52,14,python;ml;sql,95,pytorch;transformers,7,72,Data Engineer,122000-154000,1
+C072,Nina Kapoor,Computer Applications,57,8,java;spring;sql,60,pytorch,2,89,Data Engineer,42000-150000,1
+C073,Maya Singh,Computer Applications,57,9,react;node;sql,71,pytorch,8,91,Software Engineer,98000-168000,1
+C074,Rohan Singh,Computer Science,70,2,python;sql,40,tensorflow;keras,10,90,Software Engineer,110000-141000,0
+C075,Nina Khan,Data Science,80,8,java;spring;sql,40,,6,57,Intern,97000-145000,0
+C076,Isha Mehta,Information Technology,71,15,python;ml;sql,79,sklearn;tensorflow,11,87,Analyst,71000-165000,1
+C077,Diya Patel,Computer Science,70,1,react;node;sql,93,,0,46,Intern,104000-169000,0
+C078,Isha Nair,Artificial Intelligence,83,13,excel;python,41,sklearn;tensorflow,12,59,Data Engineer,61000-157000,0
+C079,Maya Mehta,Computer Science,94,4,excel;python,71,,12,91,ML Engineer,125000-150000,1
+C080,Anaya Mehta,Artificial Intelligence,55,9,python;sql,36,pytorch;transformers,2,87,Analyst,126000-158000,0
+C081,Anaya Khan,Electronics,80,8,java;spring;sql,88,sklearn;tensorflow,3,96,Software Engineer,100000-148000,1
+C082,Nina Singh,Computer Science,71,2,python;ml;sql,70,pytorch;transformers,4,88,Software Engineer,109000-171000,1
+C083,Isha Das,Electronics,72,4,react;node;sql,92,sklearn;tensorflow,5,96,ML Engineer,124000-155000,1
+C084,Isha Khan,Computer Applications,52,12,react;node;sql,64,sklearn;tensorflow,10,87,Intern,54000-171000,1
+C085,Maya Mehta,Electronics,56,1,react;node;sql,51,sklearn,11,77,ML Engineer,87000-149000,0
+C086,Rohan Iyer,Computer Applications,71,2,python;sql,95,pytorch,10,68,Software Engineer,83000-160000,1
+C087,Tara Singh,Information Technology,65,15,excel;python,39,sklearn,6,43,Data Engineer,116000-146000,0
+C088,Aarav Patel,Computer Science,51,14,python;ml;sql,56,pytorch,5,73,Analyst,53000-155000,0
+C089,Vivaan Nair,Artificial Intelligence,61,13,python;nlp,58,pytorch;transformers,3,56,Analyst,109000-149000,0
+C090,Diya Sharma,Artificial Intelligence,79,7,python;ml;sql,94,pytorch;transformers,8,67,ML Engineer,44000-168000,1
+C091,Diya Khan,Data Science,94,11,java;spring;sql,73,sklearn;tensorflow,7,89,Data Engineer,65000-164000,1
+C092,Tara Iyer,Data Science,51,11,python;sql,72,,10,72,Intern,41000-178000,1
+C093,Isha Kapoor,Computer Applications,88,15,java;spring;sql,71,,4,64,Intern,127000-148000,1
+C094,Aarav Nair,Data Science,78,3,excel;python,40,tensorflow;keras,1,74,Backend Developer,76000-166000,0
+C095,Isha Das,Electronics,84,5,python;ml;sql,60,tensorflow;keras,4,51,Analyst,72000-161000,0
+C096,Anaya Iyer,Electronics,59,3,python;ml;sql,94,sklearn,12,44,Analyst,36000-156000,0
+C097,Zara Singh,Electronics,93,3,react;node;sql,93,pytorch;transformers,5,82,Data Engineer,121000-154000,1
+C098,Anaya Mehta,Computer Applications,89,15,react;node;sql,38,pytorch;transformers,4,76,Intern,87000-147000,1
+C099,Maya Mehta,Computer Science,69,4,java;spring;sql,40,,2,39,Analyst,93000-163000,0
+C100,Vivaan Khan,Electronics,91,13,react;node;sql,54,pytorch,0,88,Intern,82000-153000,1
